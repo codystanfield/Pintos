@@ -11,34 +11,32 @@
 #include "tests/lib.h"
 #include "tests/filesys/base/syn-read.h"
 
-const char *test_name = "child-syn-read";
+const char* test_name = "child-syn-read";
 
 static char buf[BUF_SIZE];
 
 int
-main (int argc, const char *argv[]) 
-{
-  int child_idx;
-  int fd;
-  size_t i;
+main (int argc, const char* argv[]) {
+	int child_idx;
+	int fd;
+	size_t i;
 
-  quiet = true;
-  
-  CHECK (argc == 2, "argc must be 2, actually %d", argc);
-  child_idx = atoi (argv[1]);
+	quiet = true;
 
-  random_init (0);
-  random_bytes (buf, sizeof buf);
+	CHECK (argc == 2, "argc must be 2, actually %d", argc);
+	child_idx = atoi (argv[1]);
 
-  CHECK ((fd = open (file_name)) > 1, "open \"%s\"", file_name);
-  for (i = 0; i < sizeof buf; i++) 
-    {
-      char c;
-      CHECK (read (fd, &c, 1) > 0, "read \"%s\"", file_name);
-      compare_bytes (&c, buf + i, 1, i, file_name);
-    }
-  close (fd);
+	random_init (0);
+	random_bytes (buf, sizeof buf);
 
-  return child_idx;
+	CHECK ((fd = open (file_name)) > 1, "open \"%s\"", file_name);
+	for (i = 0; i < sizeof buf; i++) {
+		char c;
+		CHECK (read (fd, &c, 1) > 0, "read \"%s\"", file_name);
+		compare_bytes (&c, buf + i, 1, i, file_name);
+	}
+	close (fd);
+
+	return child_idx;
 }
 
