@@ -28,7 +28,7 @@ int find_empty_spot(){
   return 0;
 }
 
-// finds the page to evict, random choice at the moment
+// finds the page to evict, random choice at the moment, not going to be used yet
 int find_evict_page(){
   srand(time(NULL));
   // get the page to evict
