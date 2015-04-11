@@ -1,9 +1,9 @@
-/* matmult.c 
+/* matmult.c
 
    Test program to do matrix multiplication on large arrays.
- 
+
    Intended to stress virtual memory system.
-   
+
    Ideally, we could read the matrices off of the file system,
    and store the result back to the file system!
  */
@@ -33,25 +33,24 @@ int B[DIM][DIM];
 int C[DIM][DIM];
 
 int
-main (void)
-{
-  int i, j, k;
+main (void) {
+	int i, j, k;
 
-  /* Initialize the matrices. */
-  for (i = 0; i < DIM; i++)
-    for (j = 0; j < DIM; j++)
-      {
-	A[i][j] = i;
-	B[i][j] = j;
-	C[i][j] = 0;
-      }
+	/* Initialize the matrices. */
+	for (i = 0; i < DIM; i++)
+		for (j = 0; j < DIM; j++) {
+			A[i][j] = i;
+			B[i][j] = j;
+			C[i][j] = 0;
+		}
 
-  /* Multiply matrices. */
-  for (i = 0; i < DIM; i++)	
-    for (j = 0; j < DIM; j++)
-      for (k = 0; k < DIM; k++)
-	C[i][j] += A[i][k] * B[k][j];
+	/* Multiply matrices. */
+	for (i = 0; i < DIM; i++)
+		for (j = 0; j < DIM; j++)
+			for (k = 0; k < DIM; k++) {
+				C[i][j] += A[i][k] * B[k][j];
+			}
 
-  /* Done. */
-  exit (C[DIM - 1][DIM - 1]);
+	/* Done. */
+	exit (C[DIM - 1][DIM - 1]);
 }
