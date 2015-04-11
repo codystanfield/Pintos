@@ -1,6 +1,9 @@
 #ifndef FRAME_H
 #define FRAME_H
 
-void preptable();
-int find_Empty_Frame();
-void set_As_Taken(int frameindex, int mapindex);
+long long lookuptable[16];
+struct fte{
+  void* virtualAddress;
+  int t_id;
+}
+fte frametable[1024];
