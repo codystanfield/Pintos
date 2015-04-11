@@ -24,10 +24,10 @@ int find_empty_spot(){
 }
 void* aquire_user_page(int id){
   int index = find_empty_spot();
-  frametable[index]->physaddr=vtop(palloc_get_page(PAL_USER));
-  //set other info
+  frametable[index]->virtualAddress=palloc_get_page(PAL_USER);
+  frametable[index]->t_id=id;
 
 
   //in process need to replace line 526 and 486 at least
-  return ptov(frametable[index]->physaddr);
+  return frametable[index]->virtalAddress;
 }
