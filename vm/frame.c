@@ -4,12 +4,15 @@
 #include "kernel/palloc.c"
 #include "kernel/vaddr.h"
 
+// sets every bit in the table to 1, meaning every slot is free
 void preptable(){
   int i;
   for(i=0;i<16;i++){
     lookuptable[i]=-9223372036854775808;
   }
 }
+
+// finds the first empty slot, using ffsll, which returns the location of the first 1 bit in a given value
 int find_empty_spot(){
   int i;
   for(i=0;i<16;i++){
@@ -22,7 +25,9 @@ int find_empty_spot(){
   PANIC("NO FREE FRAME");
   return 0;
 }
-void* aquire_user_page(int id){
+
+// gets a new user page 
+void* acquire_user_page(int id){
   int index = find_empty_spot();
   frametable[index]->virtualAddress=palloc_get_page(PAL_USER);
   frametable[index]->t_id=id;
