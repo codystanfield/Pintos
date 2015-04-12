@@ -9,10 +9,10 @@ main (int argc, char **argv)
   int i;
 
   //for (i = 0; i < 2; i++){
-    printf("IMA FORKING MY PROCESS.\n");
-    exec("echo x");
-  //}
-  printf ("\n");
+    //printf("IMA FORKING MY PROCESS.\n");
+    exec("insult");
+//  }
+  //printf ("\n");
 
   return EXIT_SUCCESS;
 }
