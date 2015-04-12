@@ -3,13 +3,13 @@
 #include "kernel/palloc.h"
 #include "kernel/vaddr.h"
 #include <stdio.h>
-#include "lib/limits.h"
+#include "page.h"
 int frameserved;
 void preptable(){
   frameserved=0;
   int i;
   for(i=0;i<32;i++){
-    lookuptable[i] = INT_MIN;
+    lookuptable[i]=~0;
     //printf("%d\n",lookuptable[i]);
   }
 }
@@ -29,7 +29,7 @@ int find_empty_spot(){
   PANIC("NO FREE FRAME");
   return 0;
 }
-void* aquire_user_page(int id,int zero){
+void* aquire_user_page(int id,int zero,int stack){
   int index = find_empty_spot();
   frameserved+=1;
   if(zero==1)
@@ -40,7 +40,7 @@ void* aquire_user_page(int id,int zero){
   frametable[index].t_id=id;
   //printf("SERVeING FRAME NUMBER %d\n",frameserved);
 
-
+  add_entry(index,id,4|stack);
   //in process need to replace line 526 and 486 at least
   return frametable[index].virtualAddress;
 }
@@ -67,6 +67,7 @@ void set_page_as_free(int index){
 void wipe_thread_pages(tid_t id){
   int t = (int) id;
   int i;
+  free_thread_id(id);
   for(i=0;i<1024;i++){
     if(frametable[i].t_id==t){
         //printf("FREED PAGE ADDRESS %d\n",*(int*)frametable[i].virtualAddress);
