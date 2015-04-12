@@ -20,7 +20,7 @@
 #include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *file_args, void (**eip) (void), void **esp);
+static bool load (const char *file_args, void (**eip) (void), void **esp,tid_t id);
 
 /* Starts a new thread running a user program loaded from
    CMDLINE.  The new thread may be scheduled (and may even exit)
@@ -103,6 +103,7 @@ start_process (void *file_args_)
 {
   struct thread *curr = thread_current ();
   char *file_args = file_args_;
+	tid_t id = curr->tid;
   struct intr_frame if_;
   bool success;
 
@@ -111,7 +112,7 @@ start_process (void *file_args_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_args, &if_.eip, &if_.esp);
+  success = load (file_args, &if_.eip, &if_.esp,id);
 
   /* If load failed, quit. */
   palloc_free_page (file_args);
@@ -183,7 +184,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  tid_t id=cur->tid;
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -196,9 +197,11 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
+			wipe_thread_pages(id);
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+
     }
 }
 
@@ -281,18 +284,18 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp, const char *file_args);
+static bool setup_stack (void **esp, const char *file_args,tid_t id);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
-                          bool writable);
+                          bool writable,tid_t id);
 
 /* Loads an ELF executable from FILE_ARGS into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_args, void (**eip) (void), void **esp)
+load (const char *file_args, void (**eip) (void), void **esp,tid_t id)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -379,7 +382,7 @@ load (const char *file_args, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
+                                 read_bytes, zero_bytes, writable,id))
                 goto done;
             }
           else
@@ -389,7 +392,7 @@ load (const char *file_args, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, file_args))
+  if (!setup_stack (esp, file_args,id))
     goto done;
 
   /* Start address. */
@@ -468,9 +471,9 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable,tid_t id)
 {
-  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0); 
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
@@ -484,14 +487,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = aquire_user_page(1,0);
+      uint8_t *kpage = aquire_user_page(id,0);//palloc_get_page()
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+					//printf("FREEING USER PAGE\n");
+          free_user_page(kpage);//palloc_free_page (kpage);
           return false;
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -499,7 +503,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable))
         {
-          palloc_free_page (kpage);
+					//printf("FREEING USER PAGE\n");
+          free_user_page(kpage);//palloc_free_page (kpage);
           return false;
         }
 
@@ -514,7 +519,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, const char *file_args)
+setup_stack (void **esp, const char *file_args,tid_t id)
 {
   uint8_t *kpage;
   char *esp_char;
@@ -523,8 +528,8 @@ setup_stack (void **esp, const char *file_args)
   int total_bytes;
   int argc = 0;
   bool success = false;
-
-  kpage = aquire_user_page(1,1);//palloc_get_page (PAL_USER | PAL_ZERO);
+  //printf("GETTING USER PAGE\n");
+  kpage = aquire_user_page(id,1);//palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
@@ -580,7 +585,7 @@ setup_stack (void **esp, const char *file_args)
           //hex_dump ((uintptr_t) *esp, *esp, (size_t) (PHYS_BASE - *esp), 1);
         }
       else
-        palloc_free_page (kpage);
+        free_user_page(kpage);//palloc_free_page (kpage);
     }
   return success;
 }
