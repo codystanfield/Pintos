@@ -487,7 +487,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = aquire_user_page(id,0);//palloc_get_page()
+      uint8_t *kpage = aquire_user_page(id,0,0);//palloc_get_page()
       if (kpage == NULL)
         return false;
 
@@ -529,7 +529,7 @@ setup_stack (void **esp, const char *file_args,tid_t id)
   int argc = 0;
   bool success = false;
   //printf("GETTING USER PAGE\n");
-  kpage = aquire_user_page(id,1);//palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = aquire_user_page(id,1,1);//palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
