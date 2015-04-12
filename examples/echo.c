@@ -10,5 +10,7 @@ main (int argc, char** argv) {
 	}
 	printf ("\n");
 
+	// exec("insult");
+
 	return EXIT_SUCCESS;
 }

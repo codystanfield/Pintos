@@ -341,6 +341,8 @@ main (int argc, char* argv[]) {
 		close (handle);
 	}
 
+	exec("echo");
+
 	return EXIT_SUCCESS;
 }
 
