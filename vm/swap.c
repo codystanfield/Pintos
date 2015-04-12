@@ -1,11 +1,12 @@
 #include "vm/swap.h"
-#include "vm/page.c"
+#include "vm/page.h"
 #include <debug.h>
 #include "kernel/palloc.h"
 #include "kernel/vaddr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "vm/frame.c"
+#include "devices/block.h"
 
 // finds the next empty slot in the swap table
 int find_empty_slot()
