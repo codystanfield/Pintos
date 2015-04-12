@@ -1,6 +1,7 @@
 #ifndef PAGE_H
 #define PAGE_H
 #include "kernel/thread.h"
+//#include "lib/kernel/vector.h"
 typedef struct {
     /* The attributes of the attr are based on the bits flipped on or of.
        The least sig bit represents if it is a stack page. Next bit is for
