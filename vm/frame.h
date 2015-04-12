@@ -2,14 +2,17 @@
 #define FRAME_H
 
 #include <string.h>
-long long lookuptable[16];
+#include "kernel/thread.h"
+long long lookuptable[32];
 struct fte{
   void* virtualAddress;
-  int t_id; //thread id
+  int t_id;
 };
 struct fte frametable[1024];
 void preptable(void);
 int find_empty_spot(void);
-void* acquire_user_page(int id,int zero);
-long long evict_random_page(int *entry);
+void* aquire_user_page(int id,int zero);
+void free_user_page(void* page);
+void set_page_as_free(int index);
+void wipe_thread_pages(tid_t id);
 #endif
