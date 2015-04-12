@@ -28,6 +28,7 @@
 #include "kernel/syscall.h"
 #include "kernel/tss.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -96,6 +97,7 @@ main (void)
   malloc_init ();
   paging_init ();
   preptable();
+  preppagetable();
 
   /* Segmentation. */
 #ifdef USERPROG
