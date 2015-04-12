@@ -3,12 +3,13 @@
 #include "kernel/palloc.h"
 #include "kernel/vaddr.h"
 #include <stdio.h>
+#include "lib/limits.h"
 int frameserved;
 void preptable(){
   frameserved=0;
   int i;
   for(i=0;i<32;i++){
-    lookuptable[i]=~0;
+    lookuptable[i] = INT_MIN;
     //printf("%d\n",lookuptable[i]);
   }
 }
