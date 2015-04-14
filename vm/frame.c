@@ -4,16 +4,23 @@
 #include "kernel/vaddr.h"
 #include <stdio.h>
 #include "page.h"
+#include "kernel/loader.h"
+#include "kernel/exception.h"
+#include "kernel/malloc.h"
+
+
 int frameserved;
-void preptable(){
+
+void preptable(size_t page_limit){
   frameserved=0;
   int i;
   for(i=0;i<32;i++){
     lookuptable[i]=~0;
     //printf("%d\n",lookuptable[i]);
   }
+  frametable=malloc(sizeof(fte)*page_limit);
 }
-int find_empty_spot(){
+int f_find_empty_spot(){
   int i;
   int t;
   for(i=0;i<32;i++){
@@ -26,18 +33,19 @@ int find_empty_spot(){
     //printf("%d\n",t);
   }
   //printf("%d\n",t);
+  //page_fault();
   PANIC("NO FREE FRAME");
   return 0;
 }
 void* aquire_user_page(int id,int zero,int stack){
-  int index = find_empty_spot();
+  int index = f_find_empty_spot();
   frameserved+=1;
   if(zero==1)
     frametable[index].virtualAddress=palloc_get_page(PAL_USER);
   else
     frametable[index].virtualAddress=palloc_get_page(PAL_USER|PAL_ZERO);
 
-  frametable[index].t_id=id;
+    frametable[index].t_id=id;
   //printf("SERVeING FRAME NUMBER %d\n",frameserved);
 
   add_entry(index,id,4|stack);

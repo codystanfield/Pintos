@@ -20,7 +20,7 @@ page_entry sup_page_table[512];
 // dynamic array of pages.
 
 void preppagetable(void);
-int find_empty_slot(void);
+int p_find_empty_slot(void);
 void add_entry(int location,tid_t id,char attr);
 void free_thread_id(tid_t id);
 #endif

@@ -3,14 +3,16 @@
 
 #include <string.h>
 #include "kernel/thread.h"
-long long lookuptable[32];
-struct fte{
+#include "kernel/loader.h"
+
+int lookuptable[32];
+typedef struct {
   void* virtualAddress;
   int t_id;
-};
-struct fte frametable[1024];
-void preptable(void);
-int find_empty_spot(void);
+}fte;
+fte* frametable;
+void preptable(size_t page_limit);
+int f_find_empty_spot(void);
 void* aquire_user_page(int id,int zero,int stack);
 void free_user_page(void* page);
 void set_page_as_free(int index);

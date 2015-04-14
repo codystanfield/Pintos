@@ -29,6 +29,7 @@
 #include "kernel/tss.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -96,7 +97,7 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-  preptable();
+  preptable(user_page_limit);
   preppagetable();
 
   /* Segmentation. */
@@ -125,6 +126,7 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+  prepswaptable();
 #endif
 
   printf ("Boot complete.\n");
