@@ -58,7 +58,7 @@ void* aquire_user_page(tid_t id,int zero,int stack){
     frametable[index].virtualAddress=palloc_get_page(PAL_USER|PAL_ZERO);
 
     frametable[index].id=id;
-  printf("SERVeING FRAME NUMBER %d\n",frameserved);
+  //printf("SERVeING FRAME NUMBER %d\n",frameserved);
 
   add_entry(index,id,4|stack);
   //in process need to replace line 526 and 486 at least
@@ -107,7 +107,7 @@ int page_fault_handler(tid_t id){
     if(frametable[i].id!=-1)
       loop=1;
   }
-  printf("VIRTUAL ADDRESS %d : %d : %d \n",frametable[i].virtualAddress,frametable[i].id,vtop(frametable[i].virtualAddress));
+  //printf("PAGE FAULT!!!!!!!!!!!!!!!!!!!VIRTUAL ADDRESS %d : %d : %d \n",frametable[i].virtualAddress,frametable[i].id,vtop(frametable[i].virtualAddress));
   //write that page to swap
   write_page_to_swap(frametable[i].virtualAddress,id);
   return i;

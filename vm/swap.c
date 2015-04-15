@@ -35,9 +35,9 @@ int s_find_empty_slot(){
 void write_page_to_swap(void* virtualAddress,tid_t id){
   int sector=8*s_find_empty_slot();
   //intr_disable();
-  printf("MADE IT TO WRITE TO SWAP %d\n",virtualAddress);
-  block_write(swap_device,(block_sector_t)sector+8,vtop(virtualAddress));//(void*)vtop(virtualAddress));
-  /*printf("MADE IT PAST THE FIRST WRITE\n");
+  //printf("MADE IT TO WRITE TO SWAP %d\n",virtualAddress);
+  block_write(swap_device,(block_sector_t)sector+8,virtualAddress);//(void*)vtop(virtualAddress));
+  //printf("MADE IT PAST THE FIRST WRITE\n");
   block_write(swap_device,(block_sector_t)sector+1,virtualAddress+512);//(void*)vtop(virtualAddress)+512);
   block_write(swap_device,(block_sector_t)sector+2,virtualAddress+1024);//(void*)vtop(virtualAddress)+1024);
   block_write(swap_device,(block_sector_t)sector+3,virtualAddress+1536);//(void*)vtop(virtualAddress)+1536);
@@ -45,7 +45,7 @@ void write_page_to_swap(void* virtualAddress,tid_t id){
   block_write(swap_device,(block_sector_t)sector+5,virtualAddress+2560);//(void*)vtop(virtualAddress)+2560);
   block_write(swap_device,(block_sector_t)sector+6,virtualAddress+3072);//(void*)vtop(virtualAddress)+3072);
   block_write(swap_device,(block_sector_t)sector+7,virtualAddress+3584);//(void*)vtop(virtualAddress)+3584);
-  */
+
   swaptable[sector/8].id=id;
   swaptable[sector/8].virtualAddress=virtualAddress;
   //intr_enable();
