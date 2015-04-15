@@ -2,6 +2,18 @@
     http://www.happybearsoftware.com/implementing-a-dynamic-array.html
 
     Currently only works for (page_entry)s
+
+    Dynamically grows, doubles in size when full 
+
+    ----------------------------------------------------------------------------
+    USAGE:
+    Vector myVector;
+    vector_init(&myVector, initial_size_of_vector);
+    vector_append(&myVector, page);
+    vector_set(&myVector, index, myPage);
+    myPage = vector_get(&myVector, index);
+    vector_free(&myVector);
+    ----------------------------------------------------------------------------
 */
 #include "vm/page.h"
 
