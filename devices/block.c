@@ -121,9 +121,17 @@ block_read (struct block* block, block_sector_t sector, void* buffer) {
    per-block device locking is unneeded. */
 void
 block_write (struct block* block, block_sector_t sector, const void* buffer) {
+	//ASSERT(block->type==BLOCK_SWAP);
+	printf("IN BLOCK WRITE FUNCTION. Buffer at address: %d Sector # : %d\n",buffer,sector);
+	printf("BLOCK TYPE IS: %d\n Block name is: %s\n DEVICE SIZE: %d\n",block->type,block->name,block->size);
 	check_sector (block, sector);
+	printf("PRINTF #2\n");
 	ASSERT (block->type != BLOCK_FOREIGN);
+	debug_backtrace_all();
+	printf("%llu \n",*(int*)block->aux);
 	block->ops->write (block->aux, sector, buffer);
+	//debug_backtrace_all();
+	//printf("PRINTF #3\n");
 	block->write_cnt++;
 }
 
@@ -202,4 +210,3 @@ list_elem_to_block (struct list_elem* list_elem) {
 	        ? list_entry (list_elem, struct block, list_elem)
 	        : NULL);
 }
-
