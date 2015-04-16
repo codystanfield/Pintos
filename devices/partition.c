@@ -298,7 +298,9 @@ partition_read (void* p_, block_sector_t sector, void* buffer) {
 static void
 partition_write (void* p_, block_sector_t sector, const void* buffer) {
 	struct partition* p = p_;
+	//debug_backtrace();
 	block_write (p->block, p->start + sector, buffer);
+	//block_write (/*p->block*/p_, /*p->start + */sector, buffer);
 }
 
 static struct block_operations partition_operations = {
