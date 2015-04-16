@@ -1,19 +1,27 @@
 #ifndef SWAP_H
 #define SWAP_H
 
-#include "vm/page.h"
-#include <hash.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include "kernel/thread.h"
 #include "devices/block.h"
-struct swap{
-  struct hash_elem hash_elem;
-  page_entry page_entry;
-  void *addr; // virtual address
-  int page_id;
-  int t_id;
-};
-struct hash swap;
+
+struct block* swap_device;
+
+typedef struct {
+  tid_t id;
+  void* virtualAddress;
+} ste; // struct for swap table entries
+
+ste *swaptable;
+block_sector_t pageslots;
+
+
+// preparing the functions
+
 void prepswaptable(void);
-int swap_insert(void);
-int free_slot(int id);
+int find_empty_slot(void);
+void write_page_to_swap(void* virtualAddress,tid_t id);
+void read_page_from_swap(void* virtualAddress);
 
 #endif
