@@ -13,6 +13,9 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
+#include "filesys/directory.h"
+#include "filesys/inode.h"
+
 static void syscall_handler (struct intr_frame*);
 
 void
@@ -100,7 +103,7 @@ is_valid_ptr (void* ptr) {
 	return true;
 }
 
-/* Calls shutdown_power_off which terminates the kernal. */
+/* Calls shutdown_power_off which terminates the kernel. */
 void
 halt (struct intr_frame* f) {
 	int* syscall_num = (int*) (f->esp);
@@ -179,7 +182,9 @@ create (struct intr_frame* f) {
 }
 
 /* Removes a file given a file name.
-    Returns whether the deletion of a file is successful or not. */
+    Returns whether the deletion of a file is successful or not.
+
+	 Must be updated so it can delete empty directories. */
 void
 remove (struct intr_frame* f) {
 	lock_acquire (&thread_filesys_lock);
@@ -362,7 +367,7 @@ write (struct intr_frame* f) {
 }
 
 /* Changes the next byte to be read or written in open file fd to position,
-  expressed in bytes from the beginning of the file. (Thus, a position of 0 is the file's start.) . */
+  	expressed in bytes from the beginning of the file. (Thus, a position of 0 is the file's start.) . */
 void
 seek (struct intr_frame* f) {
 	lock_acquire (&thread_filesys_lock);
@@ -395,7 +400,7 @@ seek (struct intr_frame* f) {
 }
 
 /* Returns the position of the next byte to be read or
-   written in open file fd, expressed in bytes from the beginning of the file. */
+   	written in open file fd, expressed in bytes from the beginning of the file. */
 void
 tell (struct intr_frame* f) {
 	lock_acquire (&thread_filesys_lock);
@@ -425,7 +430,7 @@ tell (struct intr_frame* f) {
 }
 
 /* Closes file descriptor fd. Exiting or terminating a process implicitly
-   closes all its open file descriptors, as if by calling this function for each one. */
+   	closes all its open file descriptors, as if by calling this function for each one. */
 void
 close (struct intr_frame* f) {
 	lock_acquire (&thread_filesys_lock);
@@ -453,4 +458,102 @@ close (struct intr_frame* f) {
 	/* Only reaches here in the case of an error. */
 	lock_release (&thread_filesys_lock);
 	thread_exit ();
+}
+
+/* Changes the current working directory of the process to dir, which may be relative
+	 	or absolute. Returns true if successful, false on failure. */
+
+bool chdir (const char *dir) {
+	lock_acquire (&thread_filesys_lock);
+
+	// if relative address
+			// if dir is an existing directory, set current directory to dir
+			// if dir isn't an existing directory, return false
+	// if absolute address (/dir/dir/dir)
+			// tokenize char array with '/' as the delimiter, search for dir in home
+					// if dir doesn't exist, return false
+					// if dir does exist, get next directory, repeat process
+						// if next char is null terminator, return true
+
+	/*if (fail) {
+		return false;*/
+	}
+
+	lock_release(&thread_filesys_lock);
+	return TRUE;
+}
+
+/* Creates the directory named dir, which may be relative or absolute. Returns true if
+	 	successful, false on failure. Fails if dir already exists or if any directory name in dir,
+	 	besides the last, does not already exist. That is, mkdir("/a/b/c") succeeds only if
+	 	‘/a/b’ already exists and ‘/a/b/c’ does not. */
+
+bool mkdir (const char *dir) {
+	lock_acquire (&thread_filesys_lock);
+
+	// if given an absolute address
+			// tokenize the char arrays, using '/' as the delimiter, and test each part to see if the name exists
+			// if it doesn't already exist, check if the next piece is the null terminator
+					// if not, return false
+					// if yes, make the new directory by assiging the name an inode
+			// if it does exist, retry until it is or until null terminator
+	// if given relative address
+			// check if name is already used
+					// if it is, return false
+					// if not, make the new directory by assigning the name an inode
+
+	lock_release(&thread_filesys_lock);
+	return TRUE;
+}
+
+/* Reads a directory entry from file descriptor fd, which must represent a directory. If
+	 	successful, stores the null-terminated file name in name, which must have room for
+	 	READDIR_MAX_LEN + 1 bytes, and returns true. If no entries are left in the directory,
+	 	returns false.
+
+	 ‘.’ and ‘..’ should not be returned by readdir.
+	 If the directory changes while it is open, then it is acceptable for some entries not to
+	 	be read at all or to be read multiple times. Otherwise, each directory entry should
+	 	be read once, in any order.
+
+	 READDIR_MAX_LEN is defined in ‘lib/user/syscall.h’. If your file system supports
+	 	longer file names than the basic file system, you should increase this value from the
+	 	default of 14. */
+
+bool readdir (int fd, char *name) { // not really sure what this does
+	lock_acquire (&thread_filesys_lock);
+
+	// checks if fd is a directory
+			// if no, return false
+	//
+
+	lock_release(&thread_filesys_lock);
+	return TRUE;
+}
+
+/* Returns true if fd represents a directory, false if it represents an ordinary file. */
+
+bool isdir (int fd) {
+// would check the inode if the size of file is 0 or 1, depending on how it works
+	lock_acquire (&thread_filesys_lock);
+
+	lock_release(&thread_filesys_lock);
+	return TRUE;
+}
+
+/* Returns the inode number of the inode associated with fd, which may represent an
+	  ordinary file or a directory.
+
+	 An inode number persistently identifies a file or directory. It is unique during the
+	  file’s existence. In Pintos, the sector number of the inode is suitable for use as an
+	  inode number. */
+
+int inumber (inf fd) {
+	lock_acquire (&thread_filesys_lock);
+
+	// if valid file directory
+			// get inode number
+
+	lock_release(&thread_filesys_lock);
+	return 1;
 }
