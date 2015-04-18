@@ -16,7 +16,9 @@ struct inode_disk {
 	block_sector_t start;               /* First data sector. */
 	off_t length;                       /* File size in bytes. */
 	unsigned magic;                     /* Magic number. */
-	uint32_t unused[125];               /* Not used. */
+	uint32_t* direct_blocks[123];						/* Array of pointers to direct blocks */
+	block_sector_t* singly_indirect_block;	/* Pointer to block that contains array of pointers to direct blocks  (128 pointers total)*/
+	block_sector_t* doubly_indirect_block;	/* Pointer to block that contains array of pointers to singly indirect blocks (128 pointers to singly indirect blocks, totals 16384 data blocks) */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -35,6 +37,30 @@ struct inode {
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
 	struct inode_disk data;             /* Inode content. */
 };
+
+
+/* Code not used, just written to check logic */
+// bool data_exists(inode* inode, sometype data_to_find) {
+// 	for(int i = 0; i < 123; i++) {
+// 		if(inode->data->direct_blocks[i] == data_to_find) {
+// 			return true;
+// 		}
+// 	}
+// 	for(int i = 0; i < 128; i++) {
+// 		if(inode->data->singly_indirect_block->direct_blocks[i] == data_to_find) {
+// 			return true;
+// 		}
+// 	}
+// 	for(int i = 0; i < 128; i++) {
+// 		for(int j = 0; j < 128; j++) {
+// 			if(inode->data->doubly_indirect_blocks->singly_indirect_blocks[i]->direct_blocks[j] == data_to_find) {
+// 				return true;
+// 			}
+// 		}
+// 	}
+//
+// 	return false;
+// }
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.

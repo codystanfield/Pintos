@@ -7,6 +7,14 @@
 
 struct bitmap;
 
+struct singly_indirect_block {
+  uint32_t* direct_blocks[128];
+};
+
+struct doubly_indirect_block {
+  struct singly_indirect_block* singly_indirect_blocks[128];
+};
+
 void inode_init (void);
 bool inode_create (block_sector_t, off_t);
 struct inode* inode_open (block_sector_t);
