@@ -3,7 +3,7 @@
 
     Currently only works for (page_entry)s
 
-    Dynamically grows, doubles in size when full 
+    Dynamically grows, doubles in size when full
 
     ----------------------------------------------------------------------------
     USAGE:
@@ -28,4 +28,5 @@ void vector_append(Vector *vector, page_entry *page);
 page_entry vector_get(Vector *vector, int index);
 void vector_set(Vector *vector, int index, page_entry *page);
 void vector_double_capacity_if_full(Vector *vector);
+int vector_find_index_of_id(Vector *vector, int id);
 void vector_free(Vector *vector);

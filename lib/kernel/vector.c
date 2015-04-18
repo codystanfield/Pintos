@@ -31,7 +31,7 @@ void vector_append(Vector *vector, page_entry *page) {
 /*  Returns the page at the given index
     If the index is out of bounds, panics the kernel */
 page_entry vector_get(Vector *vector, int index) {
-  if(index >= vector->size || index < 0) {
+  if(index >= vector->capacity || index < 0) {
     PANIC("Trying to get index %d - out of bounds for vector\n", index);
   }
 
@@ -42,7 +42,7 @@ page_entry vector_get(Vector *vector, int index) {
     to the supplied page
     If the index is out of bounds, panics the kernel */
 void vector_set(Vector *vector, int index, page_entry *page) {
-  if(index >= vector->size || index < 0) {
+  if(index >= vector->capacity || index < 0) {
     PANIC("Trying to set index %d - out of bounds for vector\n", index);
   }
   vector->pages[index] = *page;
@@ -66,6 +66,19 @@ void vector_double_capacity_if_full(Vector *vector) {
     vector->size = vector->capacity / 2;
   }
 }
+
+// /*  Search the vector by id for a given page
+//     If the page cannot be found, returns -1 */
+// int vector_find_index_of_id(Vector *vector, int idToFind) {
+//   int i;
+//   for(i = 0; i < vector->size; i++) {
+//     if(vector->pages[i]->id == idToFind) {
+//       return i;
+//     }
+//   }
+//
+//   return -1;
+// }
 
 /*  Frees the memory allocated to the vector */
 void vector_free(Vector *vector) {
