@@ -4,23 +4,29 @@
 #include <string.h>
 #include "kernel/thread.h"
 #include "kernel/loader.h"
+#include "kernel/palloc.h"
+#include <hash.h>
+#include "vm/page.h"
 
-int lookuptable[16];
+
 typedef struct {
-  void* virtualAddress;
-  int id;
-}fte; // frame table entry, has a virtual address and a unique id
+  void* addr;
+  struct hash_elem hash_elem;
+  void* u_virtualAddress;
+  bool framelock;
+  struct lock list_lock;
+  struct list_elem list_elem;
+}Frame;
 
-fte* frametable;
-int page_limit;
+
 
 // preps the functions
-void preptable(size_t page_limit);
-int f_find_empty_spot(tid_t id);
-void* acquire_user_page(tid_t id,int zero,int stack);
-void free_user_page(void* page);
-void set_page_as_free(int index);
-void wipe_thread_pages(tid_t id);
-int page_fault_handler(tid_t id);
+void preptable(void);
+void* get_frame(enum palloc_flags flags);
+void unlock_frame(void* addr);
+void lock_frame(void* addr);
+Frame* find_entry(void* addr);
+void free_frame(void* kpage, uint32_t pagedir);
+
 
 #endif

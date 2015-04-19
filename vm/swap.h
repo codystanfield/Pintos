@@ -12,7 +12,7 @@ typedef struct {
   tid_t id;
   void* virtualAddress;
 } ste; // struct for swap table entries
-
+ 
 ste *swaptable;
 block_sector_t pageslots;
 

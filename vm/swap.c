@@ -61,7 +61,7 @@ void write_page_to_swap(void* virtualAddress,tid_t id){
   block_write(swap_device,(block_sector_t)sector+7,virtualAddress+3584);//(void*)vtop(virtualAddress)+3584);
 
   swaptable[sector/8].id=id;
-  swaptable[sector/8].virtualAddress=virtualAddress;
+  swaptable[sector/8].virtualAddress=virtualAddress; 
   //intr_enable();
 }
 

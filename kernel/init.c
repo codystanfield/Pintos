@@ -97,8 +97,7 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-  preptable(user_page_limit);
-  preppagetable();
+
 
   /* Segmentation. */
 #ifdef USERPROG
@@ -112,6 +111,8 @@ main (void)
   kbd_init ();
   input_init ();
 #ifdef USERPROG
+  preptable();
+  preppagetable();
   exception_init ();
   syscall_init ();
 #endif

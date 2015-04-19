@@ -4,6 +4,9 @@
 #include "kernel/gdt.h"
 #include "kernel/interrupt.h"
 #include "kernel/thread.h"
+#include "vm/page.h"
+#include "kernel/vaddr.h"
+#include "kernel/pte.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -121,7 +124,8 @@ page_fault (struct intr_frame* f) {
 	bool write;        /* True: access was write, false: access was read. */
 	bool user;         /* True: access by user, false: access by kernel. */
 	void* fault_addr;  /* Fault address. */
-
+	void* fault_page;
+	Page* page;
 	/* Obtain faulting address, the virtual address that was
 	   accessed to cause the fault.  It may point to code or to
 	   data.  It is not necessarily the address of the instruction
@@ -143,14 +147,37 @@ page_fault (struct intr_frame* f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
+	/*kill if user try to access kernel memory*/
+	if(user&&!is_user_vaddr(fault_addr))
+		kill(f);
+
 	/* Handle bad dereferences from system call implementations. */
 	if (!user) {
 		f->eip = (void (*) (void)) f->eax;
 		f->eax = 0;
 		return;
 	}
+  //debug_backtrace();
+	fault_page = (void *) (PTE_ADDR & (uint32_t) fault_addr);
+	page = find_page (fault_page);
+	//printf("PAGE IS :%u \n",fault_page);
+	if(page!=NULL){
+		//printf("in the if\n");
+		load_page(page,true);
+		return;
+	}
+	else if(fault_addr>0&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
+		Page* page = zero_page(fault_page,false);
+		load_page(page,false);
+		return;
+
+	}
 
 
+
+
+	f->eip = (void *) f->eax;
+  f->eax = 0xffffffff;
 	/* To implement virtual memory, delete the rest of the function
 	   body, and replace it with code that brings in the page to
 	   which fault_addr refers. */
@@ -164,4 +191,3 @@ page_fault (struct intr_frame* f) {
 
 	kill (f);
 }
-
