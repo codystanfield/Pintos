@@ -543,10 +543,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
    int argc = 0;
    bool success = false;
 
-   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-   if (kpage != NULL)
+   Page* p=zero_page(((uint8_t *) PHYS_BASE) - PGSIZE,true);
+   if (p != NULL)
      {
-       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+       success = load_page(p,false);//install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
        if (success)
          {
            /* Extract the TOTAL_BYTES to push initially, and decrement

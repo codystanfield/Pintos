@@ -138,7 +138,7 @@ page_fault (struct intr_frame* f) {
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */
 	intr_enable ();
-
+  //printf("pagefault at: %u\n",fault_addr);
 	/* Count page faults. */
 	page_fault_cnt++;
 
@@ -147,35 +147,42 @@ page_fault (struct intr_frame* f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	/*kill if user try to access kernel memory*/
-	if(user&&!is_user_vaddr(fault_addr))
-		kill(f);
+
+
+	if(!not_present&&write&&user){
+		//printf("invalid write\n");
+		thread_exit();
+	}
 
 	/* Handle bad dereferences from system call implementations. */
+
+  //debug_backtrace();
+	fault_page = (void *)(PTE_ADDR&(uint32_t)fault_addr);
+	page=find_page(fault_page);
+	//printf("PAGE IS :%u \n",fault_page);
+
+
+	if(page!=NULL){
+		load_page(page,false);
+		return;
+	}
+
+	else if(fault_addr>0&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
+		//printf("expanding stack------------------------------\n");
+		Page* page = zero_page(fault_page,true);
+		load_page(page,false);
+		return;
+	}
+	else if(page==NULL)
+		thread_exit();
+
+
 	if (!user) {
+		printf("KERNEL?\n");
 		f->eip = (void (*) (void)) f->eax;
 		f->eax = 0;
 		return;
 	}
-  //debug_backtrace();
-	fault_page = (void *) (PTE_ADDR & (uint32_t) fault_addr);
-	page = find_page (fault_page);
-	//printf("PAGE IS :%u \n",fault_page);
-	if(page!=NULL){
-		//printf("in the if\n");
-		load_page(page,true);
-		return;
-	}
-	else if(fault_addr>0&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
-		Page* page = zero_page(fault_page,false);
-		load_page(page,false);
-		return;
-
-	}
-
-
-
-
 	f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
 	/* To implement virtual memory, delete the rest of the function
@@ -188,6 +195,6 @@ page_fault (struct intr_frame* f) {
 	        user ? "user" : "kernel");
 
 	printf("There is no crying in Pintos!\n");
-
+  debug_backtrace_all();
 	kill (f);
 }

@@ -14,39 +14,40 @@
 
 static struct lock f_lock;
 static struct lock e_lock;
-struct hash frames;
-bool frame_less (const struct hash_elem *, const struct hash_elem *, void *);
-unsigned frame_hash (const struct hash_elem *, void *);
+static struct hash frametable;
+static bool frame_less (const struct hash_elem *, const struct hash_elem *, void *);
+static unsigned frame_hash (const struct hash_elem *, void *);
 
 void preptable(){
   lock_init(&f_lock);
   lock_init(&e_lock);
-  hash_init(&frames, frame_hash, frame_less, NULL);
+  hash_init(&frametable, frame_hash, frame_less, NULL);
+  random_init(9867);
 }
-void* get_frame(enum palloc_flags flags){
+Frame* get_frame(enum palloc_flags flags){
   //printf("in get frame\n");
-  void *frame = palloc_get_page(flags);
-  if(frame!=NULL){
+  void *addr = palloc_get_page(flags);
+  if(addr!=NULL){
     Frame* f = (Frame*)malloc(sizeof(Frame));
     if(f==NULL)
       return false;
 
-    f->addr=frame;
+    f->addr=addr;
+    //printf("getting kernel addr:%u\n",addr);
+    f->framelock=true;
     lock_acquire(&f_lock);
-    hash_insert(&frames,&f->hash_elem);
+    hash_insert(&frametable,&f->hash_elem);
     lock_release(&f_lock);
+    return f;
   }
   else{
-    PANIC("NO FREE FRAME");
+    //printf("NO FREE FRAME");
+    //PANIC("NO FREE FRAME");
+    return evict_r_frame();
   }
-  return frame;
-}
-Page* get_page(void* frame, uint32_t* pagedir){
-  Frame *f = find_entry(frame);
-  Page* page = f->u_virtualAddress;
-  return NULL;
 
 }
+
 void unlock_frame(void* addr){
   Frame* f = find_entry(addr);
   if(f!=NULL){
@@ -71,7 +72,7 @@ Frame* find_entry(void* addr){
   struct hash_elem *elem;
   f.addr=addr;
   lock_acquire(&f_lock);
-  elem=hash_find(&frames,&f.hash_elem);
+  elem=hash_find(&frametable,&f.hash_elem);
   lock_release(&f_lock);
   if(elem!=NULL)
     return hash_entry(elem,Frame,hash_elem);
@@ -85,18 +86,61 @@ void free_frame(void* kpage, uint32_t pagedir){
     lock_release(&e_lock);
   }
   lock_acquire (&f_lock);
-  hash_delete (&frames, &f->hash_elem);
+  hash_delete (&frametable, &f->hash_elem);
 	free (f);
   lock_release (&f_lock);
   lock_release(&e_lock);
 }
+Frame* evict_r_frame(){
+  Frame* f=NULL;
+  int i=random_ulong()%383;
+  //printf("evicting a frame i=%d\n",i);
+  int z;
+  lock_acquire(&e_lock);
 
-unsigned frame_hash(const struct hash_elem *f, void* a){
-  const Frame* frame= hash_entry(f,Frame,hash_elem);
-  return hash_int((unsigned)frame->addr);
+  struct hash_iterator iter;
+  hash_first(&iter,&frametable);
+  hash_next(&iter);
+
+  for(;i>0;i--){
+      hash_next(&iter);
+      //f =hash_entry(hash_cur (&iter), Frame,hash_elem);
+      //printf("Z=%d at add: %u and page addr:%u\n",z,f->addr,f->page->uaddr);
+    }
+
+  f = hash_entry(hash_cur(&iter),Frame,hash_elem);
+  if(f->framelock==true){
+    lock_release(&e_lock);
+    return evict_r_frame();
+  }
+  //printf("frame kpage is: %u\n",f->addr);
+  Page* p = f->page;
+  p->loc=SWAP;
+  p->swap_index=s_find_empty_slot();
+  f->framelock=true;
+  //printf("WRITING TO SWAP AT INDEX: %u\n",p->swap_index);
+  write_page_to_swap(f->addr,p->swap_index);
+  lock_release(&e_lock);
+
+  pagedir_clear_page (p->pagedir, p->uaddr);
+  pagedir_add_page (p->pagedir, p->uaddr, (const void *)p);
+  p->loaded = false;
+  p->kpage = NULL;
+
+  return f;
+
 }
-bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_,void *aux){
-  const Frame* a = hash_entry(a_,Frame,hash_elem);
-  const Frame* b = hash_entry(b_,Frame,hash_elem);
-  return a->addr< b->addr;
+
+static unsigned frame_hash (const struct hash_elem *f_, void *aux UNUSED)
+{
+  const Frame *f = hash_entry (f_, Frame, hash_elem);
+  return hash_int ((unsigned)f->addr);
+}
+static bool frame_less (const struct hash_elem *a_, const struct hash_elem *b_,
+               void *aux UNUSED)
+{
+  const Frame *a = hash_entry (a_, Frame, hash_elem);
+  const Frame *b = hash_entry (b_, Frame, hash_elem);
+
+  return a->addr < b->addr;
 }

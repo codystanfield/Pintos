@@ -3,24 +3,26 @@
 #include "kernel/palloc.h"
 #include "kernel/vaddr.h"
 #include "kernel/malloc.h"
+#include "vm/frame.h"
 
 const struct lock load_lock;
 
 void preppagetable(){
   lock_init(&load_lock);
 }
-Page* file_page(struct file *file, off_t ofs,size_t read_bytes, size_t zero_bytes, bool writeable, uint8_t* upage){
+Page* file_page(struct file *file, off_t ofs,size_t read_bytes, size_t zero_bytes, bool writable, uint8_t* upage){
   Page *page = (Page*) malloc(sizeof(Page));
   if (page == NULL)
     PANIC("PROBLEM GETTING MEMORY");
   //printf("GETTING FOR %u\n",upage);
   page->loc=FILE;
-  page->writeable=true;
+  page->writeable=writable;
   page->loaded=false;
   page->uaddr=upage;
   page->kpage=NULL;
   page->pagedir=thread_current()->pagedir;
   page->swap_index=-1;
+  page->zeroed=false;
 
   //File specific information
   page->file.file=file;
@@ -37,7 +39,7 @@ Page* zero_page(void* addr, bool writable){
   if(page==NULL)
     return NULL;
   page->loc=NONE;
-  page->writeable=true;
+  page->writeable=writable;
   page->loaded=false;
   page->uaddr=addr;
   page->kpage=NULL;
@@ -49,22 +51,35 @@ Page* zero_page(void* addr, bool writable){
 }
 bool load_page(Page* page, bool lock){
   //printpagestats(page);
+  Frame* f;
   lock_acquire(&load_lock);
   //printf("acquired lock\n");
   //printf("page: %u",page);
   if(page->kpage==NULL){//we have to load it into a frame
     //printf("in the if\n");
-    page->kpage=get_frame(PAL_USER);
+    f=get_frame(PAL_USER);
+    //printf("GOT THE PAGE!\n");
   }
   //printf("PASTED THE IF\n");
-  lock_release(&load_lock);
   //printf("released the lock\n");
-  set_page(page->kpage,page);
+  page->kpage=f->addr;
+  set_page(f->addr,page);
+  f->page=page;
   bool worked = true;
   if(page->zeroed==true)
     memset(page->kpage,0,PGSIZE);
-  else if(page->loc==FILE)
+  if(page->loc==FILE)
     worked = load_from_file(page->kpage,page);
+  else if(page->loc==SWAP){
+    //printf("reading from swap!!!!!!! swap index=%u\n",page->swap_index);
+    read_page_from_swap(page->swap_index,f->addr);
+    page->loc=NONE;
+  }
+  else if(page->zeroed==true)
+    memset(page->kpage,0,PGSIZE);
+  lock_release(&load_lock);
+
+
   if(!worked)
     unlock_frame(page->kpage);
   //printf("PASED THE IFS\n");

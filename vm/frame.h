@@ -12,18 +12,19 @@
 typedef struct {
   void* addr;
   struct hash_elem hash_elem;
+  Page* page;
   void* u_virtualAddress;
   bool framelock;
-  struct lock list_lock;
-  struct list_elem list_elem;
+
 }Frame;
 
 
 
 // preps the functions
 void preptable(void);
-void* get_frame(enum palloc_flags flags);
+Frame* get_frame(enum palloc_flags flags);
 void unlock_frame(void* addr);
+Frame* evict_r_frame(void);
 void lock_frame(void* addr);
 Frame* find_entry(void* addr);
 void free_frame(void* kpage, uint32_t pagedir);

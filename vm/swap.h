@@ -12,7 +12,7 @@ typedef struct {
   tid_t id;
   void* virtualAddress;
 } ste; // struct for swap table entries
- 
+
 ste *swaptable;
 block_sector_t pageslots;
 
@@ -21,7 +21,7 @@ block_sector_t pageslots;
 
 void prepswaptable(void);
 int find_empty_slot(void);
-void write_page_to_swap(void* virtualAddress,tid_t id);
-void read_page_from_swap(void* virtualAddress);
+void write_page_to_swap(void* virtualAddress,size_t sector);
+void read_page_from_swap(size_t i,void* virtualAddress);
 
 #endif

@@ -201,16 +201,7 @@ pagedir_find_page (uint32_t *pd, const void *uaddr)
 
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL)
-    {
-      if ((*pte & PTE_P) != 0)
-        {
-					printf("we got in here\n");
-          void *kpage = pte_get_page (*pte) + pg_ofs (uaddr);
-          return get_page (kpage, pd);
-        }
-      else
-        return *pte != 0 ? (void  *)*pte : NULL;
-    }
+    return *pte != 0 ? (void  *)*pte : NULL;
   else
     return NULL;
 }

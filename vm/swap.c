@@ -4,10 +4,11 @@
 #include "kernel/vaddr.h"
 #include "kernel/malloc.h"
 #include "kernel/interrupt.h"
+#include "kernel/synch.h"
 
 /* prepswaptable is a void function that gets called at startup, and it, as the name suggests,
    preps the swap table by initializing the array of structs that will be used. */
-
+struct lock lock;
 void prepswaptable(){
   /*struct block *temp=block_first();
   while(temp!=NULL){
@@ -16,9 +17,12 @@ void prepswaptable(){
     }
     temp = block_next(temp);
   }*/
+  //printf("PAGSIZE:%u",PGSIZE);
   swap_device=block_get_role((enum block_type)BLOCK_SWAP);
   pageslots=block_size(swap_device)/8;
   swaptable=malloc((size_t)sizeof(ste) * (size_t)(pageslots));
+  //printf("pageslots==%u\n",pageslots);
+  lock_init(&lock);
   int i;
   for(i=0;i<pageslots;i++){
     swaptable[i].id=-1;
@@ -30,10 +34,15 @@ void prepswaptable(){
     of the first empty slot.*/
 
 int s_find_empty_slot(){
+  lock_acquire(&lock);
   uint32_t i;
   for(i=0;i<pageslots;i++){
-    if(swaptable[i].id==-1)
+    if(swaptable[i].id==-1){
+      //printf("saving slot %d\n",i);
+      swaptable[i].id=1;
+      lock_release(&lock);
       return i;
+    }
   }
   PANIC("NO SWAP SLOT");
   return 0;
@@ -45,23 +54,21 @@ int s_find_empty_slot(){
    There are 8 calls to block_write because sectors are 8 times as small a block, so
    this way it gets written all at once to a single, contiguous piece of memory.*/
 
-void write_page_to_swap(void* virtualAddress,tid_t id){
+void write_page_to_swap(void* virtualAddress,size_t i){
   // because the swap slots are 8 times as big as the individual sectors, we multiply by 8 to get greater precision
-  int sector=8*s_find_empty_slot();
   //intr_disable();
-  //printf("MADE IT TO WRITE TO SWAP %d\n",virtualAddress); // debugging
-  block_write(swap_device,(block_sector_t)sector+8,virtualAddress);//(void*)vtop(virtualAddress));
-  //printf("MADE IT PAST THE FIRST WRITE\n"); // debugging
-  block_write(swap_device,(block_sector_t)sector+1,virtualAddress+512);//(void*)vtop(virtualAddress)+512);
-  block_write(swap_device,(block_sector_t)sector+2,virtualAddress+1024);//(void*)vtop(virtualAddress)+1024);
-  block_write(swap_device,(block_sector_t)sector+3,virtualAddress+1536);//(void*)vtop(virtualAddress)+1536);
-  block_write(swap_device,(block_sector_t)sector+4,virtualAddress+2048);//(void*)vtop(virtualAddress)+2048);
-  block_write(swap_device,(block_sector_t)sector+5,virtualAddress+2560);//(void*)vtop(virtualAddress)+2560);
-  block_write(swap_device,(block_sector_t)sector+6,virtualAddress+3072);//(void*)vtop(virtualAddress)+3072);
-  block_write(swap_device,(block_sector_t)sector+7,virtualAddress+3584);//(void*)vtop(virtualAddress)+3584);
-
-  swaptable[sector/8].id=id;
-  swaptable[sector/8].virtualAddress=virtualAddress; 
+  //printf("MADE IT TO WRITE TO SWAP %u\n",virtualAddress); // debugging
+  lock_acquire(&lock);
+  block_write(swap_device,(block_sector_t)i*8+0,virtualAddress+(512*0));//(void*)vtop(virtualAddress));
+  block_write(swap_device,(block_sector_t)i*8+1,virtualAddress+(512*1));//(void*)vtop(virtualAddress)+512);
+  block_write(swap_device,(block_sector_t)i*8+2,virtualAddress+(512*2));//(void*)vtop(virtualAddress)+1024);
+  block_write(swap_device,(block_sector_t)i*8+3,virtualAddress+(512*3));//(void*)vtop(virtualAddress)+1536);
+  block_write(swap_device,(block_sector_t)i*8+4,virtualAddress+(512*4));//(void*)vtop(virtualAddress)+2048);
+  block_write(swap_device,(block_sector_t)i*8+5,virtualAddress+(512*5));//(void*)vtop(virtualAddress)+2560);
+  block_write(swap_device,(block_sector_t)i*8+6,virtualAddress+(512*6));//(void*)vtop(virtualAddress)+3072);
+  block_write(swap_device,(block_sector_t)i*8+7,virtualAddress+(512*7));//(void*)vtop(virtualAddress)+3584);
+  swaptable[i].id=1;
+  lock_release(&lock);
   //intr_enable();
 }
 
@@ -74,22 +81,27 @@ void write_page_to_swap(void* virtualAddress,tid_t id){
    At the moment, it isn't very efficient, but we'll optimize it once we have everything
    working properly. We might use a hash table if we get the chance. */
 
-void read_page_from_swap(void* virtualAddress){
-  uint32_t i;
+void read_page_from_swap(size_t i,void* virtualAddress){
+  /*uint32_t i;
   for(i=0;i<pageslots;i++){
     if(swaptable[i].virtualAddress==virtualAddress){
-      block_read(swap_device,(block_sector_t)i*8,(void*)vtop(virtualAddress));
-      block_read(swap_device,(block_sector_t)i*8+1,(void*)vtop(virtualAddress)+512);
-      block_read(swap_device,(block_sector_t)i*8+2,(void*)vtop(virtualAddress)+1024);
-      block_read(swap_device,(block_sector_t)i*8+3,(void*)vtop(virtualAddress)+1536);
-      block_read(swap_device,(block_sector_t)i*8+4,(void*)vtop(virtualAddress)+2048);
-      block_read(swap_device,(block_sector_t)i*8+5,(void*)vtop(virtualAddress)+2560);
-      block_read(swap_device,(block_sector_t)i*8+6,(void*)vtop(virtualAddress)+3072);
-      block_read(swap_device,(block_sector_t)i*8+7,(void*)vtop(virtualAddress)+3584);
-    return;
+    */
+    lock_acquire(&lock);
+    block_read(swap_device,(block_sector_t)i*8+0,virtualAddress+(512*0));
+    block_read(swap_device,(block_sector_t)i*8+1,virtualAddress+(512*1));
+    block_read(swap_device,(block_sector_t)i*8+2,virtualAddress+(512*2));
+    block_read(swap_device,(block_sector_t)i*8+3,virtualAddress+(512*3));
+    block_read(swap_device,(block_sector_t)i*8+4,virtualAddress+(512*4));
+    block_read(swap_device,(block_sector_t)i*8+5,virtualAddress+(512*5));
+    block_read(swap_device,(block_sector_t)i*8+6,virtualAddress+(512*6));
+    block_read(swap_device,(block_sector_t)i*8+7,virtualAddress+(512*7));
+    swaptable[i].id=-1;
+    lock_release(&lock);
+
+  /*return;
     }
   }
-  PANIC("COULD NOT FIND PAGE");
+  PANIC("COULD NOT FIND PAGE");*/
 }
 
 // This is what I originally had, and what me might move to if we can get everything done.
