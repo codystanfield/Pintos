@@ -9,8 +9,7 @@
 struct block* swap_device;
 
 typedef struct {
-  tid_t id;
-  void* virtualAddress;
+  bool free;
 } ste; // struct for swap table entries
 
 ste *swaptable;
@@ -20,8 +19,8 @@ block_sector_t pageslots;
 // preparing the functions
 
 void prepswaptable(void);
-int find_empty_slot(void);
-void write_page_to_swap(void* virtualAddress,size_t sector);
+int s_find_empty_slot(void);
+int write_page_to_swap(void* virtualAddress);
 void read_page_from_swap(size_t i,void* virtualAddress);
 
 #endif

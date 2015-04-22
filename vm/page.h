@@ -5,6 +5,7 @@
 enum page_location{
   SWAP,
   FILE,
+  ZERO,
   NONE
 };
 typedef struct {
@@ -13,10 +14,10 @@ typedef struct {
   bool loaded;
   void* uaddr;
   void* kpage;
+  int frame_index;
   uint32_t* pagedir;
   size_t swap_index;
   bool zeroed;
-
   struct{
     struct file* file;
     off_t ofs;
@@ -33,5 +34,5 @@ Page* zero_page(void* addr,bool writable);
 bool load_page(Page* page, bool lock);
 void add_page(Page* page);
 void add_page(Page* page);
-bool load_from_file(uint8_t* kpage,Page* page);
+bool load_from_file(void* kpage,Page* page);
 #endif

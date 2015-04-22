@@ -10,137 +10,131 @@
 #include "lib/random.h"
 #include "kernel/pagedir.h"
 #include "kernel/synch.h"
-//#include "kernel/pagedir.c"
 
 static struct lock f_lock;
 static struct lock e_lock;
-static struct hash frametable;
-static bool frame_less (const struct hash_elem *, const struct hash_elem *, void *);
-static unsigned frame_hash (const struct hash_elem *, void *);
 
+extern userpool_base_addr;
 void preptable(){
   lock_init(&f_lock);
   lock_init(&e_lock);
-  hash_init(&frametable, frame_hash, frame_less, NULL);
-  random_init(9867);
-}
-Frame* get_frame(enum palloc_flags flags){
-  //printf("in get frame\n");
-  void *addr = palloc_get_page(flags);
-  if(addr!=NULL){
-    Frame* f = (Frame*)malloc(sizeof(Frame));
-    if(f==NULL)
-      return false;
 
-    f->addr=addr;
-    //printf("getting kernel addr:%u\n",addr);
-    f->framelock=true;
+  lock_acquire(&f_lock);
+  int i;
+  for(i=0;i<383;i++){
+    frametable[i].addr=NULL;
+    frametable[i].page=NULL;
+    frametable[i].framelock=false;
+  }
+  random_init(0);//9867
+  lock_release(&f_lock);
+}
+int get_frame(enum palloc_flags flags){
+  //printf("in get frame\n");
+
+
+  void* addr = palloc_get_page(flags);
+  if(addr!=NULL){
+    int i=((uint32_t)addr-userpool_base_addr)/PGSIZE;
     lock_acquire(&f_lock);
-    hash_insert(&frametable,&f->hash_elem);
+    frametable[i].addr=addr;
+    frametable[i].page=NULL;
+    frametable[i].framelock=true;
     lock_release(&f_lock);
-    return f;
+    return i;
   }
   else{
-    //printf("NO FREE FRAME");
-    //PANIC("NO FREE FRAME");
-    return evict_r_frame();
+    evict_r_frame();
+
+    //lock_release(&f_lock);
+    return get_frame(flags);
   }
 
 }
+Page* recover_page(void* kpage){
+  //printf("most recover page\n");
+  lock_acquire(&f_lock);
+  Page* page = frametable[((uint32_t)kpage-userpool_base_addr)/PGSIZE].page;
+  lock_release(&f_lock);
+  return page;
+}
 
-void unlock_frame(void* addr){
-  Frame* f = find_entry(addr);
-  if(f!=NULL){
-    f->framelock=false;
-  }
+void unlock_frame(int i){
+  lock_acquire(&f_lock);
+  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==true);
+  ASSERT(i>=0);
+  frametable[i].framelock=false;
+  lock_release(&f_lock);
 }
-void lock_frame(void* addr){
-  Frame* f= find_entry(addr);
-  if(f!=NULL){
-    f->framelock=true;
-  }
+void lock_frame(int i){
+  lock_acquire(&f_lock);
+  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==false);
+  ASSERT(i>=0);
+  frametable[i].framelock=true;
+  lock_release(&f_lock);
+
 }
-bool set_page(void* frame, Page* page){
-  Frame* f = find_entry(frame);
-  if(f==NULL)
-    return false;
-  f->u_virtualAddress=page->uaddr;
+bool set_page(int i, Page* page){//bool set_page(void* frame,Page* page)
+  lock_acquire(&f_lock);
+  ASSERT(frametable[i].framelock==true);
+  frametable[i].page=page;
+  lock_release(&f_lock);
   return true;
 }
-Frame* find_entry(void* addr){
-  Frame f;
-  struct hash_elem *elem;
-  f.addr=addr;
+void evict_r_frame(){
+  lock_acquire(&e_lock);
+
+
+  int i=random_ulong()%382;
   lock_acquire(&f_lock);
-  elem=hash_find(&frametable,&f.hash_elem);
-  lock_release(&f_lock);
-  if(elem!=NULL)
-    return hash_entry(elem,Frame,hash_elem);
-  else
-    return NULL;
-}
-void free_frame(void* kpage, uint32_t pagedir){
-  lock_acquire(&e_lock);
-  Frame* f= find_entry(kpage);
-  if(f==NULL){
-    lock_release(&e_lock);
-  }
-  lock_acquire (&f_lock);
-  hash_delete (&frametable, &f->hash_elem);
-	free (f);
-  lock_release (&f_lock);
-  lock_release(&e_lock);
-}
-Frame* evict_r_frame(){
-  Frame* f=NULL;
-  int i=random_ulong()%383;
-  //printf("evicting a frame i=%d\n",i);
-  int z;
-  lock_acquire(&e_lock);
-
-  struct hash_iterator iter;
-  hash_first(&iter,&frametable);
-  hash_next(&iter);
-
-  for(;i>0;i--){
-      hash_next(&iter);
-      //f =hash_entry(hash_cur (&iter), Frame,hash_elem);
-      //printf("Z=%d at add: %u and page addr:%u\n",z,f->addr,f->page->uaddr);
+  while(1){
+    if(frametable[i].framelock==false){
+      frametable[i].framelock=true;
+      break;
     }
+    else
+     i=random_ulong()%382;
 
-  f = hash_entry(hash_cur(&iter),Frame,hash_elem);
-  if(f->framelock==true){
-    lock_release(&e_lock);
-    return evict_r_frame();
   }
-  //printf("frame kpage is: %u\n",f->addr);
-  Page* p = f->page;
-  p->loc=SWAP;
-  p->swap_index=s_find_empty_slot();
-  f->framelock=true;
-  //printf("WRITING TO SWAP AT INDEX: %u\n",p->swap_index);
-  write_page_to_swap(f->addr,p->swap_index);
-  lock_release(&e_lock);
+  //ASSERT(i!=383)
 
-  pagedir_clear_page (p->pagedir, p->uaddr);
-  pagedir_add_page (p->pagedir, p->uaddr, (const void *)p);
+  //lock_acquire(&f_lock);
+  //ASSERT(frametable[i].framelock==false);
+  //frametable[i].framelock=true;
+  //ASSERT(frametable[i].addr!=NULL);
+  Page* p = frametable[i].page;
+  p->loc=SWAP;
+  //p->kpage=NULL;''
+  pagedir_clear_page(p->pagedir, p->uaddr);
+  pagedir_add_page(p->pagedir, p->uaddr,(void *)p);
   p->loaded = false;
   p->kpage = NULL;
-
-  return f;
-
+  p->swap_index=write_page_to_swap((void*)frametable[i].addr);
+  p->frame_index=-1;
+  memset(frametable[i].addr,0,PGSIZE);
+  //lock
+  //lock_acquire(&f_lock);
+  palloc_free_page(frametable[i].addr);
+  frametable[i].addr=NULL;
+  frametable[i].page=NULL;
+  lock_release(&f_lock);
+  lock_release(&e_lock);
 }
-
-static unsigned frame_hash (const struct hash_elem *f_, void *aux UNUSED)
-{
-  const Frame *f = hash_entry (f_, Frame, hash_elem);
-  return hash_int ((unsigned)f->addr);
-}
-static bool frame_less (const struct hash_elem *a_, const struct hash_elem *b_,
-               void *aux UNUSED)
-{
-  const Frame *a = hash_entry (a_, Frame, hash_elem);
-  const Frame *b = hash_entry (b_, Frame, hash_elem);
-
-  return a->addr < b->addr;
+void clear_frames_for_pd(void* pd){
+  lock_acquire(&f_lock);
+  printf("IN CLEAR FRAMES\n");
+  int i;
+  for(i=0;i<383;i++){
+    Page* p = frametable[i].page;
+    if(p!=NULL){
+      if(p->pagedir==pd){
+        free(p);
+        //palloc_free_page(frametable[i].addr);
+        frametable[i].addr=NULL;
+        frametable[i].page=NULL;
+        frametable[i].framelock=false;
+      }
+    }
+  }
+  lock_release(&f_lock);
 }

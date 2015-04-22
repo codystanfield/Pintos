@@ -24,7 +24,7 @@
 
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *file_args, void (**eip) (void), void **esp,tid_t id);
+static bool load (const char *file_args, void (**eip) (void), void **esp);
 
 
 /* Starts a new thread running a user program loaded from
@@ -109,7 +109,7 @@ start_process (void *file_args_)
   //printf("START PROCESS\n");
   struct thread *curr = thread_current ();
   char *file_args = file_args_;
-	tid_t id = curr->tid;
+	//tid_t id = curr->tid;
   struct intr_frame if_;
   bool success;
 
@@ -121,7 +121,7 @@ start_process (void *file_args_)
 
   //char* save_ptr;
   //char* token = strtok_r(file_args, " ",&save_ptr);
-  success = load (file_args, &if_.eip, &if_.esp,id);
+  success = load (file_args, &if_.eip, &if_.esp);
 
 
   if (curr->parent != NULL)
@@ -214,6 +214,7 @@ process_exit (void)
          that's been freed (and cleared). */
 			//wipe_thread_pages(id);
       cur->pagedir = NULL;
+      //clear_frames_for_pd(pd);
       pagedir_activate (NULL);
       pagedir_destroy (pd);
 
@@ -310,7 +311,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_args, void (**eip) (void), void **esp,tid_t id)
+load (const char *file_args, void (**eip) (void), void **esp)
 {
   //printf("PROCESS LOAD\n");
   struct thread *t = thread_current ();
@@ -494,6 +495,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
  ASSERT (ofs % PGSIZE == 0);
 
  off_t load_ofs = ofs;
+ file_seek (file, ofs);
  while (read_bytes > 0 || zero_bytes > 0)
    {
      /* Calculate how to fill this page.
@@ -514,8 +516,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
      //printf ("Inode: %d Ofs %d\n", block_id, load_ofs);
 
      Page *page = NULL;
-     page = file_page ( file, load_ofs, page_read_bytes,
-                               page_zero_bytes, writable, upage);
+
+     page = file_page ( file, load_ofs, page_read_bytes,page_zero_bytes, writable, upage);
      if (page == NULL)
        return false;
 
@@ -525,7 +527,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
      upage += PGSIZE;
      load_ofs += PGSIZE;
    }
- file_seek (file, ofs);
+
 
  return true;
 }
@@ -597,6 +599,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
            *esp = (void *) esp_uint;
 
            //hex_dump ((uintptr_t) *esp, *esp, (size_t) (PHYS_BASE - *esp), 1);
+
+           //unlock_frame(p->kpage);
          }
        else
          palloc_free_page (kpage);

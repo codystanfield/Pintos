@@ -186,6 +186,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  //printf("tid of thread ==%d\n",tid);
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack'
@@ -311,6 +312,7 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
   struct thread *curr = thread_current ();
+  //debug_backtrace();
 
 #ifdef USERPROG
   process_exit ();
@@ -645,11 +647,12 @@ schedule (void)
 }
 
 /* Returns a tid to use for a new thread. */
+
 static tid_t
 allocate_tid (void)
 {
-  static tid_t next_tid = 1;
   tid_t tid;
+  static tid_t next_tid = 1;
 
   lock_acquire (&tid_lock);
   tid = next_tid++;

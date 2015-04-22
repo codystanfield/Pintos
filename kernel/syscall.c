@@ -12,9 +12,11 @@
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame*);
-
+extern userpool_base_addr;
 void
 syscall_init (void) {
 	intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -276,44 +278,80 @@ filesize (struct intr_frame* f) {
     Returns the amount of characters read. */
 void
 read (struct intr_frame* f) {
-	lock_acquire (&thread_filesys_lock);
+	//lock_acquire (&thread_filesys_lock);
 	int* syscall_num = (int*) (f->esp);
 	ASSERT (*syscall_num == SYS_READ);
 
 	int* fd = syscall_num + 1;
 	char** buffer = (char**) (syscall_num + 2);
-	unsigned* size = (unsigned*) (syscall_num + 3);
-
-	if (!is_valid_ptr ((void*) fd) ||
-	    !is_valid_ptr ((void*) buffer) ||
-	    !is_valid_ptr ((void*) *buffer) ||
-	    !is_valid_ptr ((void*) size)) {
-		lock_release (&thread_filesys_lock);
-		thread_exit ();
-	}
-
-	if (*fd == STDIN_FILENO) {
-		char c;
-		c = input_getc ();
-		memcpy(*buffer, &c, 1);
-		f->eax = 1;
-		lock_release (&thread_filesys_lock);
+	unsigned* size = (unsigned*) (syscall_num + 3); //the number of bytes we have to read in.
+	struct thread* curr = thread_current();
+	//printf("buffer = %p\n",*buffer);
+	int ret =0;
+  if(*fd == STDIN_FILENO){
 		return;
 	}
+	else if (*fd == STDOUT_FILENO){
+		putbuf (*buffer, *size);
+      f->eax = *size;
+      //lock_release (&thread_filesys_lock);
+      return;
+	}
+	else if ( !is_user_vaddr (*buffer) || !is_user_vaddr (*buffer + *size) )
+    thread_exit();
+	else{
+		struct file* file;
+		int i;
+		for (i = 0; i < MAX_FILES; i++) {
+			if (curr->open_files[i].used == 1 && curr->open_files[i].fd == *fd) {
+				ASSERT (curr->open_files[i].file != NULL);
+				file=curr->open_files[i].file;
+				break;
+			}
+		}
 
-	struct thread* curr = thread_current ();
-	int i;
-	for (i = 0; i < MAX_FILES; i++) {
-		if (curr->open_files[i].used == 1 && curr->open_files[i].fd == *fd) {
-			ASSERT (curr->open_files[i].file != NULL);
-			f->eax = file_read (curr->open_files[i].file, *buffer, *size);
+		size_t rem = *size;
+		void* tbuffer=(void*)*buffer;
+		ret=0;
+		while(rem>0){
+			size_t ofs = tbuffer - pg_round_down(tbuffer);
+			Page* page = find_page(tbuffer-ofs);
+
+			if(page==NULL&&(uint32_t)tbuffer > 0 && tbuffer >= (f->esp - 32) &&(PHYS_BASE - pg_round_down (tbuffer)) <= (1<<23)){
+				page=zero_page(tbuffer-ofs,true);
+				load_page(page,true);
+			}
+			else if(page==NULL){
+				//printf("exited from here\n");
+				thread_exit();
+			}
+			if(page->writeable==false)
+				thread_exit();
+
+			while(page->loaded==false)
+					load_page(page,true);
+
+			//if(frametable[((uint32_t)page->kpage-userpool_base_addr)/PGSIZE].framelock==false)
+			//frametable[((uint32_t)page->kpage-userpool_base_addr)/PGSIZE].framelock=true;
+			lock_frame(page->frame_index);
+			//if(page->loaded=false)
+			//	load_page(page,true);
+			size_t write_bytes = ofs + rem > PGSIZE ?rem - (ofs + rem - PGSIZE) : rem;
+			lock_acquire (&thread_filesys_lock);
+			ASSERT (page->loaded);
+      ret += file_read (file, tbuffer, write_bytes);
 			lock_release (&thread_filesys_lock);
-			return;
+			rem -= write_bytes;
+      tbuffer += write_bytes;
+			unlock_frame(page->frame_index);
+
 		}
 	}
-
+	f->eax=ret;
+	return;
+  printf("there was an error in write\n");
 	/* Only reaches here in the case of an error. */
-	lock_release (&thread_filesys_lock);
+	//lock_release (&thread_filesys_lock);
 	thread_exit ();
 }
 
@@ -322,42 +360,82 @@ read (struct intr_frame* f) {
     Returns the amount of characters written. */
 void
 write (struct intr_frame* f) {
-	lock_acquire (&thread_filesys_lock);
+	//lock_acquire (&thread_filesys_lock);
 	int* syscall_num = (int*) (f->esp);
 	ASSERT (*syscall_num == SYS_WRITE);
 
 	int* fd = syscall_num + 1;
 	char** buffer = (char**) (syscall_num + 2);
 	unsigned* size = (unsigned*) (syscall_num + 3);
-
-	if (!is_valid_ptr ((void*) fd) ||
-	    !is_valid_ptr ((void*) buffer) ||
-	    !is_valid_ptr ((void*) *buffer) ||
-	    !is_valid_ptr ((void*) size)) {
-		lock_release (&thread_filesys_lock);
-		thread_exit ();
-	}
-
-	if (*fd == STDOUT_FILENO) {
-		putbuf (*buffer, *size);
-		f->eax = *size;
-		lock_release (&thread_filesys_lock);
+	struct thread* curr = thread_current();
+	int ret =0;
+  if(*fd == STDIN_FILENO){
 		return;
 	}
+	else if (*fd == STDOUT_FILENO){
+		putbuf (*buffer, *size);
+      f->eax = *size;
+      //lock_release (&thread_filesys_lock);
+      return;
+	}
+	else{
+		struct file* file;
+		int i;
+		for (i = 0; i < MAX_FILES; i++) {
+			if (curr->open_files[i].used == 1 && curr->open_files[i].fd == *fd) {
+				ASSERT (curr->open_files[i].file != NULL);
+				file=curr->open_files[i].file;
+				break;
+			}
+		}
+		if(file==NULL)
+			thread_exit();
 
-	struct thread* curr = thread_current ();
-	int i;
-	for (i = 0; i < MAX_FILES; i++) {
-		if (curr->open_files[i].used == 1 && curr->open_files[i].fd == *fd) {
-			ASSERT (curr->open_files[i].file != NULL);
-			f->eax = file_write (curr->open_files[i].file, *buffer, *size);
+		size_t rem = *size;
+		void* tbuffer=(void*)*buffer;
+		ret=0;
+		while(rem>0){
+			size_t ofs = tbuffer - pg_round_down(tbuffer);
+			//printf("tbuffer: %p page of tbuffer: %p\n",tbuffer,tbuffer-ofs);
+			Page* page = find_page(tbuffer-ofs);
+			//printf("%p\n",page);
+			if(page==NULL&&(uint32_t)tbuffer > 0 && tbuffer >= (f->esp - 32) &&(PHYS_BASE - pg_round_down (tbuffer)) <= (1<<23)){
+				page=zero_page(tbuffer-ofs,true);
+				load_page(page,true);
+
+			}
+			else if(page==NULL)
+				thread_exit();
+			while(page->loaded==false){
+				load_page(page,true);
+			}
+			//if(frametable[((uint32_t)page->kpage-userpool_base_addr)/PGSIZE].framelock==false)
+			//frametable[((uint32_t)page->kpage-userpool_base_addr)/PGSIZE].framelock=true;
+			//if(page->loaded==false)
+			//	load_page(page,true);
+			lock_frame(page->frame_index);
+			size_t write_bytes = ofs + rem > PGSIZE ?rem - (ofs + rem - PGSIZE) : rem;
+			lock_acquire (&thread_filesys_lock);
+			if(page->loaded==false){
+				printpagestats(page);
+				load_page(page,true);
+			}
+
+			ASSERT (page->loaded==true);
+
+      ret += file_write (file, tbuffer, write_bytes);
 			lock_release (&thread_filesys_lock);
-			return;
+			rem -= write_bytes;
+      tbuffer += write_bytes;
+			unlock_frame(page->frame_index);
+
 		}
 	}
-
+	f->eax=ret;
+	return;
+  printf("there was an error in write\n");
 	/* Only reaches here in the case of an error. */
-	lock_release (&thread_filesys_lock);
+	//lock_release (&thread_filesys_lock);
 	thread_exit ();
 }
 

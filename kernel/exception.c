@@ -138,7 +138,7 @@ page_fault (struct intr_frame* f) {
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */
 	intr_enable ();
-  //printf("pagefault at: %u\n",fault_addr);
+  //printf("pagefault at: %p faulting page is: %x\n",fault_addr,(void *)(PTE_ADDR&(uint32_t)fault_addr));
 	/* Count page faults. */
 	page_fault_cnt++;
 
@@ -158,12 +158,18 @@ page_fault (struct intr_frame* f) {
 
   //debug_backtrace();
 	fault_page = (void *)(PTE_ADDR&(uint32_t)fault_addr);
+	//printf("fault page == %p",fault_page);
 	page=find_page(fault_page);
 	//printf("PAGE IS :%u \n",fault_page);
 
-
+	//printf("page location %p\n",page);
+	if(page!=NULL&&write&&!page->writeable){
+		printf("writing to a page thats not writeable\n");
+		thread_exit();
+	}
 	if(page!=NULL){
 		load_page(page,false);
+		//printf("double find page %p\n",find_page(fault_page));
 		return;
 	}
 
@@ -177,12 +183,12 @@ page_fault (struct intr_frame* f) {
 		thread_exit();
 
 
-	if (!user) {
+	/*if (!user) {
 		printf("KERNEL?\n");
 		f->eip = (void (*) (void)) f->eax;
 		f->eax = 0;
 		return;
-	}
+	}*/
 	f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
 	/* To implement virtual memory, delete the rest of the function
