@@ -43,6 +43,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -127,6 +128,7 @@ struct thread {
 	struct semaphore exec_sema;         /* Semaphore for parent/child exec synchronization. */
 	bool exec_child_success;            /* Boolean for whether the currently executing child
                                            of this thread executed successfully. */
+	int ret_status;
 
 #ifdef USERPROG
 	/* Owned by kernel/process.c. */
@@ -156,6 +158,8 @@ void thread_unblock (struct thread*);
 
 struct thread* thread_current (void);
 tid_t thread_tid (void);
+struct thread *thread_by_tid (tid_t);
+
 const char* thread_name (void);
 
 void thread_exit (void) NO_RETURN;

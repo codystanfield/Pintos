@@ -4,6 +4,9 @@
 #include "kernel/gdt.h"
 #include "kernel/interrupt.h"
 #include "kernel/thread.h"
+#include "vm/page.h"
+#include "kernel/vaddr.h"
+#include "kernel/pte.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -121,7 +124,8 @@ page_fault (struct intr_frame* f) {
 	bool write;        /* True: access was write, false: access was read. */
 	bool user;         /* True: access by user, false: access by kernel. */
 	void* fault_addr;  /* Fault address. */
-
+	void* fault_page;
+	Page* page;
 	/* Obtain faulting address, the virtual address that was
 	   accessed to cause the fault.  It may point to code or to
 	   data.  It is not necessarily the address of the instruction
@@ -134,7 +138,7 @@ page_fault (struct intr_frame* f) {
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */
 	intr_enable ();
-
+  //printf("pagefault at: %p faulting page is: %x\n",fault_addr,(void *)(PTE_ADDR&(uint32_t)fault_addr));
 	/* Count page faults. */
 	page_fault_cnt++;
 
@@ -143,14 +147,50 @@ page_fault (struct intr_frame* f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
+
+
+	if(!not_present&&write&&user){
+		//printf("invalid write\n");
+		thread_exit();
+	}
+
 	/* Handle bad dereferences from system call implementations. */
-	if (!user) {
-		f->eip = (void (*) (void)) f->eax;
-		f->eax = 0;
+
+  //debug_backtrace();
+	fault_page = (void *)(PTE_ADDR&(uint32_t)fault_addr);
+	//printf("fault page == %p",fault_page);
+	page=find_page(fault_page);
+	//printf("PAGE IS :%u \n",fault_page);
+
+	//printf("page location %p\n",page);
+	if(page!=NULL&&write&&!page->writeable){
+		printf("writing to a page thats not writeable\n");
+		thread_exit();
+	}
+	if(page!=NULL){
+		load_page(page,false);
+		//printf("double find page %p\n",find_page(fault_page));
 		return;
 	}
 
+	else if(fault_addr>0&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
+		//printf("expanding stack------------------------------\n");
+		Page* page = zero_page(fault_page,true);
+		load_page(page,false);
+		return;
+	}
+	else if(page==NULL)
+		thread_exit();
 
+
+	/*if (!user) {
+		printf("KERNEL?\n");
+		f->eip = (void (*) (void)) f->eax;
+		f->eax = 0;
+		return;
+	}*/
+	f->eip = (void *) f->eax;
+  f->eax = 0xffffffff;
 	/* To implement virtual memory, delete the rest of the function
 	   body, and replace it with code that brings in the page to
 	   which fault_addr refers. */
@@ -161,7 +201,6 @@ page_fault (struct intr_frame* f) {
 	        user ? "user" : "kernel");
 
 	printf("There is no crying in Pintos!\n");
-
+  debug_backtrace_all();
 	kill (f);
 }
-

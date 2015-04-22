@@ -62,11 +62,14 @@ sema_down (struct semaphore* sema) {
 
 	ASSERT (sema != NULL);
 	ASSERT (!intr_context ());
-
+  //printf("SEMAAA\n");
 	old_level = intr_disable ();
 	while (sema->value == 0) {
+		//printf("waiting in sema\n");
 		list_push_back (&sema->waiters, &thread_current ()->elem);
+		//printf("waiting in sema2\n");
 		thread_block ();
+		//printf("waiting in sema3\n");
 	}
 	sema->value--;
 	intr_set_level (old_level);

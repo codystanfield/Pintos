@@ -8,129 +8,133 @@
 #include "kernel/exception.h"
 #include "kernel/malloc.h"
 #include "lib/random.h"
+#include "kernel/pagedir.h"
+#include "kernel/synch.h"
 
+static struct lock f_lock;
+static struct lock e_lock;
 
-int frameserved;
+extern userpool_base_addr;
+void preptable(){
+  lock_init(&f_lock);
+  lock_init(&e_lock);
 
-/* preptable, as the name suggests, preps the frame table by initializing each value in each cell
-   in the frame array to -1, signifying the slot is empty.*/
-
-void preptable(size_t page_limit_t){
-  frameserved=0;
+  lock_acquire(&f_lock);
   int i;
-  for(i=0;i<16;i++){
-    lookuptable[i]=~0;
-    //printf("%d\n",lookuptable[i]);
+  for(i=0;i<383;i++){
+    frametable[i].addr=NULL;
+    frametable[i].page=NULL;
+    frametable[i].framelock=false;
   }
-  page_limit=383;
-  frametable=malloc(sizeof(fte)*10);
-  for(i=0;i<5;i++){
-    frametable[i].id=-1;
-    frametable[i].virtualAddress=-1;
+  random_init(0);//9867
+  lock_release(&f_lock);
+}
+int get_frame(enum palloc_flags flags){
+  //printf("in get frame\n");
+
+
+  void* addr = palloc_get_page(flags);
+  if(addr!=NULL){
+    int i=((uint32_t)addr-userpool_base_addr)/PGSIZE;
+    lock_acquire(&f_lock);
+    frametable[i].addr=addr;
+    frametable[i].page=NULL;
+    frametable[i].framelock=true;
+    lock_release(&f_lock);
+    return i;
   }
+  else{
+    evict_r_frame();
+
+    //lock_release(&f_lock);
+    return get_frame(flags);
+  }
+
+}
+Page* recover_page(void* kpage){
+  //printf("most recover page\n");
+  lock_acquire(&f_lock);
+  Page* page = frametable[((uint32_t)kpage-userpool_base_addr)/PGSIZE].page;
+  lock_release(&f_lock);
+  return page;
 }
 
-/* f_find_empty_spot parses the entire frame table, looking for the first empty spot it comes across.
-   It returns the array location of the first available empty spot. */
+void unlock_frame(int i){
+  lock_acquire(&f_lock);
+  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==true);
+  ASSERT(i>=0);
+  frametable[i].framelock=false;
+  lock_release(&f_lock);
+}
+void lock_frame(int i){
+  lock_acquire(&f_lock);
+  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==false);
+  ASSERT(i>=0);
+  frametable[i].framelock=true;
+  lock_release(&f_lock);
 
-int f_find_empty_spot(tid_t id){
-  int i;
-  int t;
-  /*for(i=0;i<16;i++){
+}
+bool set_page(int i, Page* page){//bool set_page(void* frame,Page* page)
+  lock_acquire(&f_lock);
+  ASSERT(frametable[i].framelock==true);
+  frametable[i].page=page;
+  lock_release(&f_lock);
+  return true;
+}
+void evict_r_frame(){
+  lock_acquire(&e_lock);
 
-    t= __builtin_ffsl(lookuptable[i]);
-    if(t!=0){
-      lookuptable[i]=lookuptable[i]&(~(1<<(t-1)));
-      return i*32+t-1;
+
+  int i=random_ulong()%382;
+  lock_acquire(&f_lock);
+  while(1){
+    if(frametable[i].framelock==false){
+      frametable[i].framelock=true;
+      break;
     }
-    //printf("%d\n",t);
+    else
+     i=random_ulong()%382;
+
   }
-  */
-  for(i=0;i<10;i++){
-    if(frametable[i].id==-1) // the id == -1 is testing to find an empty slot with id of -1
-      return i;
-  }
-  //printf("%d\n",t);
-  //page_fault();
-  //return page_fault_handler(id);
-  //PANIC("NO FREE FRAME");
-  return page_fault_handler(id); // if there are no more free spots in the frame table, page faults
+  //ASSERT(i!=383)
+
+  //lock_acquire(&f_lock);
+  //ASSERT(frametable[i].framelock==false);
+  //frametable[i].framelock=true;
+  //ASSERT(frametable[i].addr!=NULL);
+  Page* p = frametable[i].page;
+  p->loc=SWAP;
+  //p->kpage=NULL;''
+  pagedir_clear_page(p->pagedir, p->uaddr);
+  pagedir_add_page(p->pagedir, p->uaddr,(void *)p);
+  p->loaded = false;
+  p->kpage = NULL;
+  p->swap_index=write_page_to_swap((void*)frametable[i].addr);
+  p->frame_index=-1;
+  memset(frametable[i].addr,0,PGSIZE);
+  //lock
+  //lock_acquire(&f_lock);
+  palloc_free_page(frametable[i].addr);
+  frametable[i].addr=NULL;
+  frametable[i].page=NULL;
+  lock_release(&f_lock);
+  lock_release(&e_lock);
 }
-
-/* acquire_user_page takes the thread id, a value saying if you want the page zeroed out or not, and
-   an int stack that says if it's a stack page or not, with 1 being true.*/
-
-void* acquire_user_page(tid_t id, int zero, int stack){
-  int index = f_find_empty_spot(id);
-  frameserved+=1;
-  if(zero==1)
-    frametable[index].virtualAddress=palloc_get_page(PAL_USER);
-  else
-    frametable[index].virtualAddress=palloc_get_page(PAL_USER|PAL_ZERO);
-
-    frametable[index].id=id;
-  //printf("SERVeING FRAME NUMBER %d\n",frameserved);
-
-  add_entry(index,id,4|stack);
-  //in process need to replace line 526 and 486 at least
-  return frametable[index].virtualAddress;
-}
-
-/* free_user_page takes a virtual address and frees the page at that location */
-
-void free_user_page(void* page){
+void clear_frames_for_pd(void* pd){
+  lock_acquire(&f_lock);
+  printf("IN CLEAR FRAMES\n");
   int i;
-  for(i=0;i<page_limit;i++){
-    if(frametable[i].virtualAddress==page){
-      set_page_as_free(i); // function that says a page at i in the array is free
-      palloc_free_page(page);
-      return;
+  for(i=0;i<383;i++){
+    Page* p = frametable[i].page;
+    if(p!=NULL){
+      if(p->pagedir==pd){
+        free(p);
+        //palloc_free_page(frametable[i].addr);
+        frametable[i].addr=NULL;
+        frametable[i].page=NULL;
+        frametable[i].framelock=false;
+      }
     }
   }
-  //Call function for a page that is not found.
-  //page fault
-}
-
-/* sets the page at a given int 'index' in the array to free */
-
-void set_page_as_free(int index){
-  int LUT_offset= index%32;
-  int LUT_index= index/32;
-  lookuptable[LUT_index]=lookuptable[LUT_index]|(1<<LUT_offset);
-  frametable[index].virtualAddress=-1;
-  frametable[index].id=-1;
-}
-
-/* wipe_thread_pages takes a thread id 'id' and sets the given page location to free, as
-   well as frees the thread id, allowing it subsequent uses. */
-
-void wipe_thread_pages(tid_t id){
-  int t = (int) id;
-  int i;
-  free_thread_id(id);
-  for(i=0;i<page_limit;i++){
-    if(frametable[i].id==t){
-        //printf("FREED PAGE ADDRESS %d\n",*(int*)frametable[i].virtualAddress);
-        //palloc_free_page(frametable[i].virtualAddress);
-        set_page_as_free(i);
-    }
-  }
-}
-
-/* our page fault handler that gets called when there's a page fault */
-
-int page_fault_handler(tid_t id){
-  //select random filled page
-  random_init(0);
-  int loop=0;
-  int i;
-  while(loop==0){
-    i =random_ulong()%5;
-    if(frametable[i].id!=-1)
-      loop=1;
-  }
-  //printf("PAGE FAULT!!!!!VIRTUAL ADDRESS %d : %d : %d \n",frametable[i].virtualAddress,frametable[i].id,vtop(frametable[i].virtualAddress));
-  //write that page to swap
-  write_page_to_swap(frametable[i].virtualAddress,id);
-  return i;
+  lock_release(&f_lock);
 }

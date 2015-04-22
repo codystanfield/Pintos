@@ -15,95 +15,101 @@
 #include "kernel/init.h"
 #include "kernel/interrupt.h"
 #include "kernel/palloc.h"
+#include "kernel/malloc.h"
 #include "kernel/thread.h"
 #include "kernel/vaddr.h"
 #include "vm/frame.h"
+#include "vm/page.h"
+
+
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *file_args, void (**eip) (void), void **esp,tid_t id);
+static bool load (const char *file_args, void (**eip) (void), void **esp);
+
 
 /* Starts a new thread running a user program loaded from
    CMDLINE.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-tid_t
-process_execute (const char *cmdline)
-{
-  struct thread *curr = thread_current ();
-  int *file_args;
-  char *file_args_;
-  char *new_cmdline;
-  char *token;
-  char *save_ptr;
-  int cmdline_len;
-  int i, j;
-  int total_bytes;
-  tid_t tid;
-  bool valid_char_encountered;
+   tid_t
+   process_execute (const char *cmdline)
+   {
+     struct thread *curr = thread_current ();
+     int *file_args;
+     char *file_args_;
+     char *new_cmdline;
+     char *token;
+     char *save_ptr;
+     int cmdline_len;
+     int i, j;
+     int total_bytes;
+     tid_t tid;
+     bool valid_char_encountered;
 
-  file_args = palloc_get_page (0);
-  new_cmdline = palloc_get_page (0);
-  if (file_args == NULL || new_cmdline == NULL)
-    return TID_ERROR;
+     file_args = palloc_get_page (0);
+     new_cmdline = palloc_get_page (0);
+     if (file_args == NULL || new_cmdline == NULL)
+       return TID_ERROR;
 
-  /* Parse CMDLINE to NEW_CMDLINE into an acceptable format.
-     Essentially, we are removing extraneous spaces because
-     of the way we implemented tokenizing. */
-  cmdline_len = strlen (cmdline) + 1;
-  valid_char_encountered = false;
-  j = 0;
-  for (i = 0; i < cmdline_len; i++)
-    {
-      if (!valid_char_encountered && cmdline[i] != ' ')
-        {
-          new_cmdline[j] = cmdline[i];
-          valid_char_encountered = true;
-          j++;
-        }
-      else if (valid_char_encountered)
-        {
-          if (cmdline[i] == ' ')
-            valid_char_encountered = false;
-          new_cmdline[j] = cmdline[i];
-          j++;
-        }
-    }
+     /* Parse CMDLINE to NEW_CMDLINE into an acceptable format.
+        Essentially, we are removing extraneous spaces because
+        of the way we implemented tokenizing. */
+     cmdline_len = strlen (cmdline) + 1;
+     valid_char_encountered = false;
+     j = 0;
+     for (i = 0; i < cmdline_len; i++)
+       {
+         if (!valid_char_encountered && cmdline[i] != ' ')
+           {
+             new_cmdline[j] = cmdline[i];
+             valid_char_encountered = true;
+             j++;
+           }
+         else if (valid_char_encountered)
+           {
+             if (cmdline[i] == ' ')
+               valid_char_encountered = false;
+             new_cmdline[j] = cmdline[i];
+             j++;
+           }
+       }
 
-  /* Make a copy of NEW_CMDLINE to FILE_ARGS_. */
-  file_args_ = (char *) (file_args + 1);
-  strlcpy (file_args_, new_cmdline, PGSIZE);
+     /* Make a copy of NEW_CMDLINE to FILE_ARGS_. */
+     file_args_ = (char *) (file_args + 1);
+     strlcpy (file_args_, new_cmdline, PGSIZE);
 
-  /* Tokenize FILE_ARGS_ using a space as the delimiter. */
-  total_bytes = 0;
-  for (token = strtok_r (file_args_, " ", &save_ptr); token != NULL;
-       token = strtok_r (NULL, " ", &save_ptr))
-    total_bytes += strlen (token) + 1;
+     /* Tokenize FILE_ARGS_ using a space as the delimiter. */
+     total_bytes = 0;
+     for (token = strtok_r (file_args_, " ", &save_ptr); token != NULL;
+          token = strtok_r (NULL, " ", &save_ptr))
+       total_bytes += strlen (token) + 1;
 
-  /* Put TOTAL_BYTES at the beginning of FILE_ARGS.
-     So please understand that FILE_ARGS is a character
-     array where the first 4 bytes represent an integer
-     stating how many total bytes there are in the argument
-     list. Thus, the first real character is at file_args[4]. */
-  file_args[0] = total_bytes;
+     /* Put TOTAL_BYTES at the beginning of FILE_ARGS.
+        So please understand that FILE_ARGS is a character
+        array where the first 4 bytes represent an integer
+        stating how many total bytes there are in the argument
+        list. Thus, the first real character is at file_args[4]. */
+     file_args[0] = total_bytes;
 
-  /* Create a new thread to execute the process. */
-  tid = thread_create (&file_args_[0], PRI_DEFAULT, start_process, file_args);
-  sema_down (&curr->exec_sema);
+     /* Create a new thread to execute the process. */
+     tid = thread_create (&file_args_[0], PRI_DEFAULT, start_process, file_args);
+     sema_down (&curr->exec_sema);
 
-  palloc_free_page (new_cmdline);
-  if (tid == TID_ERROR)
-    palloc_free_page (file_args);
-  return tid;
-}
+     palloc_free_page (new_cmdline);
+     if (tid == TID_ERROR)
+       palloc_free_page (file_args);
+     return tid;
+   }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
 start_process (void *file_args_)
 {
+  //printf("START PROCESS\n");
   struct thread *curr = thread_current ();
   char *file_args = file_args_;
-	tid_t id = curr->tid;
+	//tid_t id = curr->tid;
   struct intr_frame if_;
   bool success;
 
@@ -112,18 +118,23 @@ start_process (void *file_args_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_args, &if_.eip, &if_.esp,id);
 
-  /* If load failed, quit. */
-  palloc_free_page (file_args);
+  //char* save_ptr;
+  //char* token = strtok_r(file_args, " ",&save_ptr);
+  success = load (file_args, &if_.eip, &if_.esp);
+
+
   if (curr->parent != NULL)
     {
+      //set_up_user_prog_stack (&if_.esp, &save_ptr, token);
       curr->parent->exec_child_success = success;
       sema_up (&curr->parent->exec_sema);
     }
-  if (!success)
+  if (!success){
+    palloc_free_page (file_args);
     thread_exit ();
-
+  }
+  palloc_free_page (file_args);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -133,6 +144,7 @@ start_process (void *file_args_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -146,6 +158,7 @@ start_process (void *file_args_)
 int
 process_wait (tid_t child_tid)
 {
+  //printf("IM WAITING NOW\n");
   int exit_status = -1;
   struct thread *curr = thread_current ();
   struct thread *t;
@@ -155,9 +168,11 @@ process_wait (tid_t child_tid)
 
   for (e = list_begin (live_list); e != list_end (live_list); e = list_next (e))
     {
+      //printf("INA FOR LOOP\n");
       t = list_entry (e, struct thread, child_elem);
       if (t->tid == child_tid)
         {
+
           sema_down (&t->exit_sema);
           break;
         }
@@ -165,6 +180,7 @@ process_wait (tid_t child_tid)
 
   for (e = list_begin (zombie_list); e != list_end (zombie_list); e = list_next (e))
     {
+      //printf("INA FOR LOOP-------------\n");
       t = list_entry (e, struct thread, child_elem);
       if (t->tid == child_tid)
         {
@@ -174,7 +190,7 @@ process_wait (tid_t child_tid)
           break;
         }
     }
-
+  //printf("made it through wait");
   return exit_status;
 }
 
@@ -184,7 +200,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  tid_t id=cur->tid;
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -197,8 +212,9 @@ process_exit (void)
          directory before destroying the process's page
          directory, or our active page directory will be one
          that's been freed (and cleared). */
-			wipe_thread_pages(id);
+			//wipe_thread_pages(id);
       cur->pagedir = NULL;
+      //clear_frames_for_pd(pd);
       pagedir_activate (NULL);
       pagedir_destroy (pd);
 
@@ -284,19 +300,20 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp, const char *file_args,tid_t id);
+static bool setup_stack (void **esp, const char *file_args);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
-                          bool writable,tid_t id);
+                          bool writable);
 
 /* Loads an ELF executable from FILE_ARGS into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_args, void (**eip) (void), void **esp,tid_t id)
+load (const char *file_args, void (**eip) (void), void **esp)
 {
+  //printf("PROCESS LOAD\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -382,7 +399,7 @@ load (const char *file_args, void (**eip) (void), void **esp,tid_t id)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable,id))
+                                 read_bytes, zero_bytes, writable))
                 goto done;
             }
           else
@@ -390,9 +407,9 @@ load (const char *file_args, void (**eip) (void), void **esp,tid_t id)
           break;
         }
     }
-
+  //printf("BEFORE STACK SETUP\n");
   /* Set up stack. */
-  if (!setup_stack (esp, file_args,id))
+  if (!setup_stack (esp,file_args))
     goto done;
 
   /* Start address. */
@@ -471,123 +488,124 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
-              uint32_t read_bytes, uint32_t zero_bytes, bool writable,tid_t id)
+             uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
-  ASSERT (pg_ofs (upage) == 0);
-  ASSERT (ofs % PGSIZE == 0);
+ ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+ ASSERT (pg_ofs (upage) == 0);
+ ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
-  while (read_bytes > 0 || zero_bytes > 0)
-    {
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+ off_t load_ofs = ofs;
+ file_seek (file, ofs);
+ while (read_bytes > 0 || zero_bytes > 0)
+   {
+     /* Calculate how to fill this page.
+        We will read PAGE_READ_BYTES bytes from FILE
+        and zero the final PAGE_ZERO_BYTES bytes. */
+     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      uint8_t *kpage = acquire_user_page(id,0,0);//palloc_get_page()
-      if (kpage == NULL)
-        return false;
+     //block_sector_t sector_idx = inode_get_inumber (file_get_inode (file), load_ofs);
+     //off_t block_id = -1;
 
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-					//printf("FREEING USER PAGE\n");
-          free_user_page(kpage);//palloc_free_page (kpage);
-          return false;
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+     /* If we have a read-only segment obtain its corresponding block sector
+        to be used later on in sharing read-only frames. */
+     //if (writable == false)
+    //   block_id = inode_get_block_number (file_get_inode (file), load_ofs);
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable))
-        {
-					//printf("FREEING USER PAGE\n");
-          free_user_page(kpage);//palloc_free_page (kpage);
-          return false;
-        }
+     //printf ("[Load segemnt] rb=%d zb=%d writable=%d page=%d\n", page_read_bytes, page_zero_bytes, writable, upage);
+     //printf ("Inode: %d Ofs %d\n", block_id, load_ofs);
 
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-    }
-  return true;
+     Page *page = NULL;
+
+     page = file_page ( file, load_ofs, page_read_bytes,page_zero_bytes, writable, upage);
+     if (page == NULL)
+       return false;
+
+     /* Advance. */
+     read_bytes -= page_read_bytes;
+     zero_bytes -= page_zero_bytes;
+     upage += PGSIZE;
+     load_ofs += PGSIZE;
+   }
+
+
+ return true;
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-static bool
-setup_stack (void **esp, const char *file_args,tid_t id)
-{
-  uint8_t *kpage;
-  char *esp_char;
-  unsigned int *esp_uint;
-  int *esp_int;
-  int total_bytes;
-  int argc = 0;
-  bool success = false;
-  //printf("GETTING USER PAGE\n");
-  kpage = acquire_user_page(id,1,1);//palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        {
-          /* Extract the TOTAL_BYTES to push initially, and decrement
-             ESP by that amount. */
-          total_bytes = ((int *) file_args)[0];
-          *esp = PHYS_BASE - total_bytes;
+ static bool
+ setup_stack (void **esp, const char *file_args)
+ {
+   uint8_t *kpage;
+   char *esp_char;
+   unsigned int *esp_uint;
+   int *esp_int;
+   int total_bytes;
+   int argc = 0;
+   bool success = false;
 
-          /* Save the value of ESP as a char pointer, and copy all
-             of the tokenized arguments onto the stack. */
-          esp_char = *esp;
-          memcpy (esp_char, &file_args[sizeof (int)], total_bytes);
+   Page* p=zero_page(((uint8_t *) PHYS_BASE) - PGSIZE,true);
+   if (p != NULL)
+     {
+       success = load_page(p,false);//install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+       if (success)
+         {
+           /* Extract the TOTAL_BYTES to push initially, and decrement
+              ESP by that amount. */
+           total_bytes = ((int *) file_args)[0];
+           *esp = PHYS_BASE - total_bytes;
 
-          /* Word-align ESP and save it as an unsigned int pointer. */
-          *esp -= ((unsigned int) esp_char % 4);
-          esp_uint = *esp;
+           /* Save the value of ESP as a char pointer, and copy all
 
-          /* Now push the starting stack address of each tokenized
-             argument onto the stack, starting with address 0. */
-          esp_uint--;
-          *esp_uint = 0;
-          do
-            {
-              total_bytes--;
-              if (esp_char[total_bytes - 1] == '\0')
-                {
-                  esp_uint--;
-                  *esp_uint = (unsigned int) &esp_char[total_bytes];
-                  argc++;
-                }
-            }
-          while (total_bytes > 0);
+              of the tokenized arguments onto the stack. */
+           esp_char = *esp;
+           memcpy (esp_char, &file_args[sizeof (int)], total_bytes);
+           /* Word-align ESP and save it as an unsigned int pointer. */
+           *esp -= ((unsigned int) esp_char % 4);
+           esp_uint = *esp;
 
-          /* Now push the stack address of the last address pushed onto the
-             stack. In other words, push what will be known as 'char **argv'
-             within a program's main function. */
-          esp_uint--;
-          *esp_uint = (unsigned int) (esp_uint + 1);
+           /* Now push the starting stack address of each tokenized
+              argument onto the stack, starting with address 0. */
+           esp_uint--;
+           *esp_uint = 0;
+           do
+             {
+               total_bytes--;
+               if (esp_char[total_bytes - 1] == '\0')
+                 {
+                   esp_uint--;
+                   *esp_uint = (unsigned int) &esp_char[total_bytes];
+                   argc++;
+                 }
+             }
+           while (total_bytes > 0);
 
-          /* Next, push ARGC onto the stack. */
-          esp_int = (int *) --esp_uint;
-          *esp_int = argc;
+           /* Now push the stack address of the last address pushed onto the
+              stack. In other words, push what will be known as 'char **argv'
+              within a program's main function. */
+           esp_uint--;
+           *esp_uint = (unsigned int) (esp_uint + 1);
 
-          /* Finally, push a fake return address of 0 onto the stack. */
-          esp_uint--;
-          *esp_uint = 0;
+           /* Next, push ARGC onto the stack. */
+           esp_int = (int *) --esp_uint;
+           *esp_int = argc;
 
-          /* Update ESP to point to the end of the initialized stack. */
-          *esp = (void *) esp_uint;
+           /* Finally, push a fake return address of 0 onto the stack. */
+           esp_uint--;
+           *esp_uint = 0;
 
-          //hex_dump ((uintptr_t) *esp, *esp, (size_t) (PHYS_BASE - *esp), 1);
-        }
-      else
-        free_user_page(kpage);//palloc_free_page (kpage);
-    }
-  return success;
+           /* Update ESP to point to the end of the initialized stack. */
+           *esp = (void *) esp_uint;
+
+           //hex_dump ((uintptr_t) *esp, *esp, (size_t) (PHYS_BASE - *esp), 1);
+
+           //unlock_frame(p->kpage);
+         }
+       else
+         palloc_free_page (kpage);
+     }
+ return success;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

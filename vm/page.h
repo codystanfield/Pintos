@@ -2,25 +2,37 @@
 #define PAGE_H
 #include "kernel/thread.h"
 //#include "lib/kernel/vector.h"
+enum page_location{
+  SWAP,
+  FILE,
+  ZERO,
+  NONE
+};
 typedef struct {
-    /* The attributes of the attr are based on the bits flipped on or of.
-       The least sig bit represents if it is a stack page. Next bit is for
-       swap and the next is for if it is in a frame.
-       00000001 -stack page
-       00000010 -swap page
-       00000100 -frame page
-       */
-    int location;
-    tid_t id;
-    char attr;
+  enum page_location loc;
+  bool writeable;
+  bool loaded;
+  void* uaddr;
+  void* kpage;
+  int frame_index;
+  uint32_t* pagedir;
+  size_t swap_index;
+  bool zeroed;
+  struct{
+    struct file* file;
+    off_t ofs;
+    size_t read_bytes;
+    size_t zero_bytes;
+  } file;
 
-} page_entry;
 
-page_entry sup_page_table[512];
-// dynamic array of pages.
+}Page;
 
 void preppagetable(void);
-int p_find_empty_slot(void);
-void add_entry(int location,tid_t id,char attr);
-void free_thread_id(tid_t id);
+Page* file_page(struct file *file, off_t ofs,size_t read_bytes, size_t zero_bytes, bool writeable, uint8_t* upage);
+Page* zero_page(void* addr,bool writable);
+bool load_page(Page* page, bool lock);
+void add_page(Page* page);
+void add_page(Page* page);
+bool load_from_file(void* kpage,Page* page);
 #endif

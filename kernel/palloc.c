@@ -36,8 +36,9 @@ struct pool {
 static struct pool kernel_pool, user_pool;
 
 static void init_pool (struct pool*, void* base, size_t page_cnt,
-                       const char* name);
+                       const char* name,bool user);
 static bool page_from_pool (const struct pool*, void* page);
+unsigned userpool_base_addr;
 
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
@@ -55,9 +56,9 @@ palloc_init (size_t user_page_limit) {
 	kernel_pages = free_pages - user_pages;
 
 	/* Give half of memory to kernel, half to user. */
-	init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
+	init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool",false);
 	init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
-	           user_pages, "user pool");
+	           user_pages, "user pool",true);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -149,7 +150,7 @@ palloc_free_page (void* page) {
 /* Initializes pool P as starting at START and ending at END,
    naming it NAME for debugging purposes. */
 static void
-init_pool (struct pool* p, void* base, size_t page_cnt, const char* name) {
+init_pool (struct pool* p, void* base, size_t page_cnt, const char* name,bool user) {
 	/* We'll put the pool's used_map at its base.
 	   Calculate the space needed for the bitmap
 	   and subtract it from the pool's size. */
@@ -165,6 +166,8 @@ init_pool (struct pool* p, void* base, size_t page_cnt, const char* name) {
 	lock_init (&p->lock);
 	p->used_map = bitmap_create_in_buf (page_cnt, base, bm_pages * PGSIZE);
 	p->base = base + bm_pages * PGSIZE;
+	if(user)
+		userpool_base_addr=(unsigned)base + bm_pages * PGSIZE;
 }
 
 /* Returns true if PAGE was allocated from POOL,
