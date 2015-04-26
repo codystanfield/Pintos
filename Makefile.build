@@ -1,6 +1,6 @@
 # -*- makefile -*-
 
-# WARNING: Don't edit me!  I am automatically generated. 
+# WARNING: Don't edit me!  I am automatically generated.
 
 SRCDIR = ../..
 
@@ -54,6 +54,7 @@ lib/kernel_SRC += lib/kernel/list.c	# Doubly-linked lists.
 lib/kernel_SRC += lib/kernel/bitmap.c	# Bitmaps.
 lib/kernel_SRC += lib/kernel/hash.c	# Hash tables.
 lib/kernel_SRC += lib/kernel/console.c	# printf(), putchar().
+lib/kernel_SRC += lib/kernel/vector.c
 
 # User process code.
 kernel_SRC += kernel/process.c		# Process loading.
@@ -65,6 +66,9 @@ kernel_SRC += kernel/tss.c		# TSS management.
 
 # No virtual memory code yet.
 #vm_SRC = vm/file.c			# Some file.
+vm_SRC += vm/frame.c
+vm_SRC += vm/page.c
+vm_SRC += vm/swap.c
 
 # Filesystem code.
 filesys_SRC  = filesys/filesys.c	# Filesystem core.
@@ -81,7 +85,7 @@ DEPENDS = $(patsubst %.o,%.d,$(OBJECTS))
 kernel/kernel.lds.s: CPPFLAGS += -P
 kernel/kernel.lds.s: kernel/kernel.lds.S kernel/loader.h
 
-kernel.o: kernel/kernel.lds.s $(OBJECTS) 
+kernel.o: kernel/kernel.lds.s $(OBJECTS)
 	$(LD) -T $< -o $@ $(OBJECTS)
 
 kernel.bin: kernel.o
@@ -97,7 +101,7 @@ os.dsk: kernel.bin
 	cat $^ > $@
 
 clean::
-	rm -f $(OBJECTS) $(DEPENDS) 
+	rm -f $(OBJECTS) $(DEPENDS)
 	rm -f kernel/loader.o kernel/kernel.lds.s kernel/loader.d
 	rm -f kernel.bin.tmp
 	rm -f kernel.o kernel.lds.s
