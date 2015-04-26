@@ -7,6 +7,7 @@
 #include "filesys/free-map.h"
 #include "kernel/malloc.h"
 
+
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
@@ -16,9 +17,9 @@ struct inode_disk {
 	block_sector_t start;               /* First data sector. */
 	off_t length;                       /* File size in bytes. */
 	unsigned magic;                     /* Magic number. */
-	uint32_t* direct_blocks[123];						/* Array of pointers to direct blocks */
-	block_sector_t* singly_indirect_block;	/* Pointer to block that contains array of pointers to direct blocks  (128 pointers total)*/
-	block_sector_t* doubly_indirect_block;	/* Pointer to block that contains array of pointers to singly indirect blocks (128 pointers to singly indirect blocks, totals 16384 data blocks) */
+	uint32_t* direct_blocks[123];						/* Array of pointers to direct blocks; addresses 61.5kB, or 62,976 bytes */
+	singly_indirect_block* singly_indirect_block_;	/* Pointer to block that contains array of pointers to direct blocks  (128 pointers total); addresses 64kB, or 65,536 bytes */
+	doubly_indirect_block* doubly_indirect_block_;	/* Pointer to block that contains array of pointers to singly indirect blocks (128 pointers to singly indirect blocks, totals 16384 data blocks); addresses 8MB, or 8,388,608 bytes */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -37,30 +38,6 @@ struct inode {
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
 	struct inode_disk data;             /* Inode content. */
 };
-
-
-/* Code not used, just written to check logic */
-// bool data_exists(inode* inode, sometype data_to_find) {
-// 	for(int i = 0; i < 123; i++) {
-// 		if(inode->data->direct_blocks[i] == data_to_find) {
-// 			return true;
-// 		}
-// 	}
-// 	for(int i = 0; i < 128; i++) {
-// 		if(inode->data->singly_indirect_block->direct_blocks[i] == data_to_find) {
-// 			return true;
-// 		}
-// 	}
-// 	for(int i = 0; i < 128; i++) {
-// 		for(int j = 0; j < 128; j++) {
-// 			if(inode->data->doubly_indirect_blocks->singly_indirect_blocks[i]->direct_blocks[j] == data_to_find) {
-// 				return true;
-// 			}
-// 		}
-// 	}
-//
-// 	return false;
-// }
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.
@@ -91,6 +68,7 @@ inode_init (void) {
    device.
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
+//TODO: need to update for new inode structure. Make sure to have the pointers point to NULL to keep file size down while you can
 bool
 inode_create (block_sector_t sector, off_t length) {
 	struct inode_disk* disk_inode = NULL;
@@ -112,7 +90,7 @@ inode_create (block_sector_t sector, off_t length) {
 			if (sectors > 0) {
 				static char zeros[BLOCK_SECTOR_SIZE];
 				size_t i;
-
+				//TODO: I think this initializes the pointers to NULL (since everything is zeroed out)
 				for (i = 0; i < sectors; i++) {
 					block_write (fs_device, disk_inode->start + i, zeros);
 				}
@@ -127,6 +105,7 @@ inode_create (block_sector_t sector, off_t length) {
 /* Reads an inode from SECTOR
    and returns a `struct inode' that contains it.
    Returns a null pointer if memory allocation fails. */
+//TODO: need to check how much memory to allocate depenging on file size
 struct inode*
 inode_open (block_sector_t sector) {
 	struct list_elem* e;
@@ -142,7 +121,7 @@ inode_open (block_sector_t sector) {
 		}
 	}
 
-	/* Allocate memory. */
+	/* Allocate memory if inode is not already open. */
 	inode = malloc (sizeof * inode);
 	if (inode == NULL) {
 		return NULL;
@@ -176,6 +155,7 @@ inode_get_inumber (const struct inode* inode) {
 /* Closes INODE and writes it to disk. (Does it?  Check code.)
    If this was the last reference to INODE, frees its memory.
    If INODE was also a removed inode, frees its blocks. */
+//TODO: update to make sure to free allocated pointers if necessary
 void
 inode_close (struct inode* inode) {
 	/* Ignore null pointer. */
@@ -210,25 +190,126 @@ inode_remove (struct inode* inode) {
 /* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
-off_t
-inode_read_at (struct inode* inode, void* buffer_, off_t size, off_t offset) {
+//TODO: need to change to check ranges (if reading from direct, singly indirect or doubly indirect sectors)
+// off_t
+// inode_read_at (struct inode* inode, void* buffer_, off_t size, off_t offset) {
+// 	uint8_t* buffer = buffer_;		//buffer that holds 1 byte at a time
+// 	off_t bytes_read = 0;
+// 	uint8_t* bounce = NULL;
+//
+// 	while (size > 0) {
+// 		/* Disk sector to read, starting byte offset within sector. */
+// 		block_sector_t sector_idx = byte_to_sector (inode, offset);
+// 		int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+//
+// 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
+// 		off_t inode_left = inode_length (inode) - offset;
+// 		int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
+// 		int min_left = inode_left < sector_left ? inode_left : sector_left;
+//
+// 		/* Number of bytes to actually copy out of this sector. */
+// 		int chunk_size = size < min_left ? size : min_left;
+// 		if (chunk_size <= 0) {
+// 			break;
+// 		}
+//
+// 		if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE) {
+// 			/* Read full sector directly into caller's buffer. */
+// 			block_read (fs_device, sector_idx, buffer + bytes_read);
+// 		} else {
+// 			/* Read sector into bounce buffer, then partially copy
+// 			   into caller's buffer. */
+// 			if (bounce == NULL) {
+// 				bounce = malloc (BLOCK_SECTOR_SIZE);
+// 				if (bounce == NULL) {
+// 					break;
+// 				}
+// 			}
+// 			block_read (fs_device, sector_idx, bounce);
+// 			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
+// 		}
+//
+// 		/* Advance. */
+// 		size -= chunk_size;
+// 		offset += chunk_size;
+// 		bytes_read += chunk_size;
+// 	}
+// 	free (bounce);
+//
+// 	return bytes_read;
+// }
+
+/* TODO: could be optimized greatly by not traversing the structure after each sector */
+off_t inode_read_at(struct inode* inode, void* buffer_, off_t size, off_t offset) {
 	uint8_t* buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t* bounce = NULL;
 
-	while (size > 0) {
-		/* Disk sector to read, starting byte offset within sector. */
-		block_sector_t sector_idx = byte_to_sector (inode, offset);
-		int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+	int section;
+	uint32_t* sector_idx;
+	int sector_ofs;
 
-		/* Bytes left in inode, bytes left in sector, lesser of the two. */
-		off_t inode_left = inode_length (inode) - offset;
-		int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
-		int min_left = inode_left < sector_left ? inode_left : sector_left;
+	if(offset < 0) {
+		PANIC("You dun goofed, reading from a negative address relative to the file\n");
+	}
+	//TODO: Should this simply read as much of the file as possible and then return instead of panicking?
+	if(offset > 8517120) {
+		PANIC("You dun goofed, reading outside of the max file size (~8MB)\n");
+	}
+	if(offset < 62976) {
+		section = 0;
+	}
+	else if(offset < 128512) {
+		section = 1;
+	}
+	else {
+		section = 2;
+	}
 
-		/* Number of bytes to actually copy out of this sector. */
-		int chunk_size = size < min_left ? size : min_left;
-		if (chunk_size <= 0) {
+	while(size > 0) {
+		//need brackets on each case for some reason, compile error without it (has to do with declaring a variable as the first statement in a case)
+		switch(section) {
+			/* Accessing direct blocks */
+			case 0: {
+				int direct_index = offset / BLOCK_SECTOR_SIZE;	//TODO: byte_to_sector() perhaps?
+				//should this be a block_sector_t and use byte_to_sector?
+				sector_idx = inode->data.direct_blocks[direct_index];	//pointer to location of the sector
+				break;
+			}
+			/* Accessing singly indirect blocks */
+			case 1: {
+				int direct_index = (offset - 62976) / BLOCK_SECTOR_SIZE;
+				sector_idx = inode->data.singly_indirect_block_->direct_blocks[direct_index];
+			}
+			/* Accessing doubly indirect blocks */
+			case 2: {
+				int indirect_index = (offset - 128512) / (BLOCK_SECTOR_SIZE * 128);
+				int direct_index = indirect_index / BLOCK_SECTOR_SIZE;
+				sector_idx = inode->data.doubly_indirect_block_->singly_indirect_blocks[indirect_index]->direct_blocks[direct_index];
+			}
+			/* Something went wrong */
+			default: {
+				PANIC("\"case\" set to something other than 0, 1 or 2\n");
+			}
+		}
+
+		if(sector_idx == NULL) {
+			PANIC("Accessing uninitialized sector (should probably just return here)\n");
+		}
+
+		sector_ofs = offset % BLOCK_SECTOR_SIZE;
+
+		off_t sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
+
+		int chunk_size;
+		if(size < sector_left) {
+			chunk_size = size;
+		}
+		else {
+			chunk_size = sector_left;
+		}
+
+		if(chunk_size <= 0) {
 			break;
 		}
 
@@ -244,16 +325,32 @@ inode_read_at (struct inode* inode, void* buffer_, off_t size, off_t offset) {
 					break;
 				}
 			}
-			block_read (fs_device, sector_idx, bounce);
-			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
+			block_read (fs_device, sector_idx, bounce);	//read the sector into the bounce buffer
+			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size); //read chunk_size bytes from bounce to the buffer
 		}
 
 		/* Advance. */
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
+
+		//Check if you are in a new section now
+		//TODO: do I need to check for EOF or out of bounds? What happens if they request more than the EOF?
+		//seems like the PDF said allow past EOF, still not sure about past max size (vulnerable to attacks)
+		if(offset < 0) {
+			PANIC("Should this happen?\n");
+		}
+		if(offset > 8517120) {
+			PANIC("Should probably just terminate the call at this point (reading past the max file size)\n");
+		}
+		if(offset >= 62976 && offset < 128512) {
+			section = 1;
+		}
+		else if(offset >= 128512 && offset <= 8517120) {
+			section = 2;
+		}
 	}
-	free (bounce);
+	free(bounce);
 
 	return bytes_read;
 }
@@ -263,6 +360,7 @@ inode_read_at (struct inode* inode, void* buffer_, off_t size, off_t offset) {
    less than SIZE if end of file is reached or an error occurs.
    (Normally a write at end of file would extend the inode, but
    growth is not yet implemented.) */
+//TODO: update to grow file when you run out of the current type of blocks (direct, singly indirect, doubly indirect)
 off_t
 inode_write_at (struct inode* inode, const void* buffer_, off_t size,
                 off_t offset) {
@@ -270,11 +368,53 @@ inode_write_at (struct inode* inode, const void* buffer_, off_t size,
 	off_t bytes_written = 0;
 	uint8_t* bounce = NULL;
 
+	int section;
+	uint32_t* sector_idx;
+	int sector_ofs;
+
 	if (inode->deny_write_cnt) {
 		return 0;
 	}
 
+	if(offset < 0) {
+		PANIC("You dun goofed, writing to a negative address relative to the file\n");
+	}
+	//TODO: should probably just have this return at this point
+	if(offset > 8517120) {
+		PANIC("You dun goofed, writing outside of the max file size (~8MB)\n");
+	}
+	if(offset < 62976) {
+		section = 0;
+	}
+	else if(offset < 128512) {
+		section = 1;
+	}
+	else {
+		section = 2;
+	}
+
+	//TODO: THIS IS WRONG!!! NEED TO CHECK FOR FREE SECTORS
 	while (size > 0) {
+		switch(section) {
+			case 0: {
+				int direct_index = offset / BLOCK_SECTOR_SIZE;
+				//if the sector exists, set sector_idx to the sector, else allocate the sector
+				sector_idx = inode->data.direct_blocks[direct_index];
+				//TODO: check for NULL pointer, allocate if needed
+			}
+			case 1: {
+				int direct_index = (offset - 62976) / BLOCK_SECTOR_SIZE;
+				sector_idx = inode->data.singly_indirect_block_->direct_blocks[direct_index];
+				//TODO: check for NULL pointer, allocate if needed
+			}
+			case 2: {
+				int indirect_index = (offset - 128512) / (BLOCK_SECTOR_SIZE * 128));
+				int direct_index = indirect_index / BLOCK_SECTOR_SIZE;
+				sector_idx = inode->data.doubly_indirect_block_->singly_indirect_blocks[indirect_index]->direct_blocks[direct_index];
+				//TODO: check for NULL pointer, allocate if needed
+			}
+		}
+
 		/* Sector to write, starting byte offset within sector. */
 		block_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % BLOCK_SECTOR_SIZE;

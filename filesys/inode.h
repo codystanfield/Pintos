@@ -7,13 +7,13 @@
 
 struct bitmap;
 
-struct singly_indirect_block {
+typedef struct {
   uint32_t* direct_blocks[128];
-};
+} singly_indirect_block;
 
-struct doubly_indirect_block {
-  struct singly_indirect_block* singly_indirect_blocks[128];
-};
+typedef struct {
+  singly_indirect_block* singly_indirect_blocks[128];
+} doubly_indirect_block;
 
 void inode_init (void);
 bool inode_create (block_sector_t, off_t);
