@@ -7,6 +7,7 @@
 #include "vm/page.h"
 #include "kernel/vaddr.h"
 #include "kernel/pte.h"
+#include "kernel/pagedir.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -138,7 +139,6 @@ page_fault (struct intr_frame* f) {
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */
 	intr_enable ();
-  //printf("pagefault at: %p faulting page is: %x\n",fault_addr,(void *)(PTE_ADDR&(uint32_t)fault_addr));
 	/* Count page faults. */
 	page_fault_cnt++;
 
@@ -148,47 +148,34 @@ page_fault (struct intr_frame* f) {
 	user = (f->error_code & PF_U) != 0;
 
 
-
+  /*Trying to write to a kernel directory*/
 	if(!not_present&&write&&user){
-		//printf("invalid write\n");
 		thread_exit();
 	}
 
-	/* Handle bad dereferences from system call implementations. */
-
-  //debug_backtrace();
 	fault_page = (void *)(PTE_ADDR&(uint32_t)fault_addr);
-	//printf("fault page == %p",fault_page);
-	page=find_page(fault_page);
-	//printf("PAGE IS :%u \n",fault_page);
-
-	//printf("page location %p\n",page);
+	page=(Page*)pagedir_find_page(thread_current()->pagedir,fault_page);
+	/*Writing to a none-writable page*/
 	if(page!=NULL&&write&&!page->writeable){
-		printf("writing to a page thats not writeable\n");
 		thread_exit();
 	}
+	/*Page not loaded*/
 	if(page!=NULL){
 		load_page(page,false);
-		//printf("double find page %p\n",find_page(fault_page));
 		return;
 	}
-
-	else if(fault_addr>0&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
-		//printf("expanding stack------------------------------\n");
+	/*Case for stack growth*/
+	else if((fault_addr>0)&&fault_addr>=(f->esp-32)&&(PHYS_BASE-pg_round_down(fault_addr))<=(1<<23)){
 		Page* page = zero_page(fault_page,true);
 		load_page(page,false);
 		return;
 	}
+	/*No entry in the pagedir. Something funnys going on here. We'd better
+	  kill it to be safe.*/
 	else if(page==NULL)
 		thread_exit();
 
 
-	/*if (!user) {
-		printf("KERNEL?\n");
-		f->eip = (void (*) (void)) f->eax;
-		f->eax = 0;
-		return;
-	}*/
 	f->eip = (void *) f->eax;
   f->eax = 0xffffffff;
 	/* To implement virtual memory, delete the rest of the function

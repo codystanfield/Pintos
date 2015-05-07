@@ -2,139 +2,100 @@
 #include <debug.h>
 #include "kernel/palloc.h"
 #include "kernel/vaddr.h"
-#include <stdio.h>
-#include "page.h"
-#include "kernel/loader.h"
-#include "kernel/exception.h"
+#include "vm/page.h"
 #include "kernel/malloc.h"
 #include "lib/random.h"
 #include "kernel/pagedir.h"
 #include "kernel/synch.h"
+#include "vm/swap.h"
 
-static struct lock f_lock;
-static struct lock e_lock;
+static struct lock frame_lock;
 
-extern userpool_base_addr;
+extern uint32_t userpool_base_addr;
+/* Preps our frametable.*/
 void preptable(){
-  lock_init(&f_lock);
-  lock_init(&e_lock);
-
-  lock_acquire(&f_lock);
+  lock_init(&frame_lock);
   int i;
   for(i=0;i<383;i++){
     frametable[i].addr=NULL;
     frametable[i].page=NULL;
     frametable[i].framelock=false;
   }
-  random_init(0);//9867
-  lock_release(&f_lock);
+  random_init(0);
 }
+
+/* Attempts to obtain a frame. If it cannot it will evict one
+   and try again.*/
 int get_frame(enum palloc_flags flags){
-  //printf("in get frame\n");
-
-
   void* addr = palloc_get_page(flags);
   if(addr!=NULL){
     int i=((uint32_t)addr-userpool_base_addr)/PGSIZE;
-    lock_acquire(&f_lock);
+    lock_acquire(&frame_lock);
     frametable[i].addr=addr;
     frametable[i].page=NULL;
     frametable[i].framelock=true;
-    lock_release(&f_lock);
+    lock_release(&frame_lock);
     return i;
   }
   else{
     evict_r_frame();
-
-    //lock_release(&f_lock);
     return get_frame(flags);
   }
-
 }
-Page* recover_page(void* kpage){
-  //printf("most recover page\n");
-  lock_acquire(&f_lock);
-  Page* page = frametable[((uint32_t)kpage-userpool_base_addr)/PGSIZE].page;
-  lock_release(&f_lock);
-  return page;
+/* Frees a frame. This function should only be called
+   when destroying a process's pagedir*/
+void free_frame(void* addr){
+  int i =((uint32_t)addr-userpool_base_addr)/PGSIZE;
+  lock_acquire(&frame_lock);
+  frametable[i].addr=NULL;
+  frametable[i].page=NULL;
+  frametable[i].framelock=false;
+  palloc_free_page(addr);
+  lock_release(&frame_lock);
 }
-
+/* Unlocks a frame*/
 void unlock_frame(int i){
-  lock_acquire(&f_lock);
-  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==true);
   ASSERT(i>=0);
   frametable[i].framelock=false;
-  lock_release(&f_lock);
 }
+/* Locks a frame*/
 void lock_frame(int i){
-  lock_acquire(&f_lock);
-  //ASSERT(frametable[((uint32_t)addr-userpool_base_addr)/PGSIZE].framelock==false);
   ASSERT(i>=0);
   frametable[i].framelock=true;
-  lock_release(&f_lock);
-
 }
-bool set_page(int i, Page* page){//bool set_page(void* frame,Page* page)
-  lock_acquire(&f_lock);
-  ASSERT(frametable[i].framelock==true);
-  frametable[i].page=page;
-  lock_release(&f_lock);
-  return true;
-}
+/* Evicts a random frame. If the frame's page is dirty it
+   will be written to swap otherwise it will be set to where
+   it orginally came from be it a zero page or a file.*/
 void evict_r_frame(){
-  lock_acquire(&e_lock);
-
-
-  int i=random_ulong()%382;
-  lock_acquire(&f_lock);
+  int i=random_ulong()%383;
+  lock_acquire(&frame_lock);
   while(1){
     if(frametable[i].framelock==false){
       frametable[i].framelock=true;
       break;
     }
     else
-     i=random_ulong()%382;
-
+     i=random_ulong()%383;
   }
-  //ASSERT(i!=383)
-
-  //lock_acquire(&f_lock);
-  //ASSERT(frametable[i].framelock==false);
-  //frametable[i].framelock=true;
-  //ASSERT(frametable[i].addr!=NULL);
+  lock_release(&frame_lock);
   Page* p = frametable[i].page;
-  p->loc=SWAP;
-  //p->kpage=NULL;''
-  pagedir_clear_page(p->pagedir, p->uaddr);
-  pagedir_add_page(p->pagedir, p->uaddr,(void *)p);
-  p->loaded = false;
-  p->kpage = NULL;
-  p->swap_index=write_page_to_swap((void*)frametable[i].addr);
+  if(pagedir_is_dirty(p->pagedir,frametable[i].addr)){
+    p->loc=SWAP;
+    pagedir_clear_page(p->pagedir, p->uaddr);
+    pagedir_custom_page(p->pagedir, p->uaddr,(void *)p);
+    p->loaded = false;
+    p->swap_index=write_page_to_swap((void*)frametable[i].addr);
+  }
+  else if(p->loc==FILE||p->writeable==false){
+    pagedir_clear_page(p->pagedir, p->uaddr);
+    pagedir_custom_page(p->pagedir, p->uaddr,(void *)p);
+    p->loaded = false;
+  }
+
   p->frame_index=-1;
-  memset(frametable[i].addr,0,PGSIZE);
-  //lock
-  //lock_acquire(&f_lock);
+  lock_acquire(&frame_lock);
   palloc_free_page(frametable[i].addr);
   frametable[i].addr=NULL;
   frametable[i].page=NULL;
-  lock_release(&f_lock);
-  lock_release(&e_lock);
-}
-void clear_frames_for_pd(void* pd){
-  lock_acquire(&f_lock);
-  printf("IN CLEAR FRAMES\n");
-  int i;
-  for(i=0;i<383;i++){
-    Page* p = frametable[i].page;
-    if(p!=NULL){
-      if(p->pagedir==pd){
-        free(p);
-        //palloc_free_page(frametable[i].addr);
-        frametable[i].addr=NULL;
-        frametable[i].page=NULL;
-        frametable[i].framelock=false;
-      }
-    }
-  }
-  lock_release(&f_lock);
+  lock_release(&frame_lock);
 }

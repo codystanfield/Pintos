@@ -13,7 +13,6 @@ typedef struct {
   void* addr;
   Page* page;
   bool framelock;
-
 }Frame;
 
 Frame frametable[383];
@@ -21,9 +20,8 @@ Frame frametable[383];
 // preps the functions
 void preptable(void);
 int get_frame(enum palloc_flags flags);
-Page* recover_page(void* kpage);
-bool set_page(int i, Page* page);
 void unlock_frame(int i);
 void evict_r_frame(void);
+void free_frame(void* addr);
 void lock_frame(int i);
 #endif

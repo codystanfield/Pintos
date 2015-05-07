@@ -18,7 +18,6 @@
 #include "kernel/malloc.h"
 #include "kernel/thread.h"
 #include "kernel/vaddr.h"
-#include "vm/frame.h"
 #include "vm/page.h"
 
 
@@ -31,76 +30,68 @@ static bool load (const char *file_args, void (**eip) (void), void **esp);
    CMDLINE.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-   tid_t
-   process_execute (const char *cmdline)
-   {
-     struct thread *curr = thread_current ();
-     int *file_args;
-     char *file_args_;
-     char *new_cmdline;
-     char *token;
-     char *save_ptr;
-     int cmdline_len;
-     int i, j;
-     int total_bytes;
-     tid_t tid;
-     bool valid_char_encountered;
-
+tid_t
+process_execute (const char *cmdline)
+{
+  struct thread *curr = thread_current ();
+  int *file_args;
+  char *file_args_;
+   char *new_cmdline;
+   char *token;
+   char *save_ptr;
+   int cmdline_len;
+   int i, j;
+   int total_bytes;
+   tid_t tid;
+   bool valid_char_encountered;
      file_args = palloc_get_page (0);
-     new_cmdline = palloc_get_page (0);
-     if (file_args == NULL || new_cmdline == NULL)
-       return TID_ERROR;
-
+   new_cmdline = palloc_get_page (0);
+   if (file_args == NULL || new_cmdline == NULL)
+     return TID_ERROR;
      /* Parse CMDLINE to NEW_CMDLINE into an acceptable format.
-        Essentially, we are removing extraneous spaces because
-        of the way we implemented tokenizing. */
-     cmdline_len = strlen (cmdline) + 1;
-     valid_char_encountered = false;
-     j = 0;
-     for (i = 0; i < cmdline_len; i++)
-       {
-         if (!valid_char_encountered && cmdline[i] != ' ')
-           {
-             new_cmdline[j] = cmdline[i];
-             valid_char_encountered = true;
-             j++;
-           }
-         else if (valid_char_encountered)
-           {
-             if (cmdline[i] == ' ')
-               valid_char_encountered = false;
-             new_cmdline[j] = cmdline[i];
-             j++;
-           }
-       }
-
+      Essentially, we are removing extraneous spaces because
+      of the way we implemented tokenizing. */
+   cmdline_len = strlen (cmdline) + 1;
+   valid_char_encountered = false;
+   j = 0;
+   for (i = 0; i < cmdline_len; i++)
+     {
+       if (!valid_char_encountered && cmdline[i] != ' ')
+         {
+           new_cmdline[j] = cmdline[i];
+           valid_char_encountered = true;
+           j++;
+         }
+       else if (valid_char_encountered)
+         {
+           if (cmdline[i] == ' ')
+             valid_char_encountered = false;
+           new_cmdline[j] = cmdline[i];
+           j++;
+         }
+     }
      /* Make a copy of NEW_CMDLINE to FILE_ARGS_. */
-     file_args_ = (char *) (file_args + 1);
-     strlcpy (file_args_, new_cmdline, PGSIZE);
-
+   file_args_ = (char *) (file_args + 1);
+   strlcpy (file_args_, new_cmdline, PGSIZE);
      /* Tokenize FILE_ARGS_ using a space as the delimiter. */
-     total_bytes = 0;
-     for (token = strtok_r (file_args_, " ", &save_ptr); token != NULL;
-          token = strtok_r (NULL, " ", &save_ptr))
-       total_bytes += strlen (token) + 1;
-
+   total_bytes = 0;
+   for (token = strtok_r (file_args_, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr))
+     total_bytes += strlen (token) + 1;
      /* Put TOTAL_BYTES at the beginning of FILE_ARGS.
-        So please understand that FILE_ARGS is a character
-        array where the first 4 bytes represent an integer
-        stating how many total bytes there are in the argument
-        list. Thus, the first real character is at file_args[4]. */
-     file_args[0] = total_bytes;
-
+      So please understand that FILE_ARGS is a character
+      array where the first 4 bytes represent an integer
+      stating how many total bytes there are in the argument
+      list. Thus, the first real character is at file_args[4]. */
+   file_args[0] = total_bytes;
      /* Create a new thread to execute the process. */
-     tid = thread_create (&file_args_[0], PRI_DEFAULT, start_process, file_args);
-     sema_down (&curr->exec_sema);
-
+   tid = thread_create (&file_args_[0], PRI_DEFAULT, start_process, file_args);
+   sema_down (&curr->exec_sema);
      palloc_free_page (new_cmdline);
-     if (tid == TID_ERROR)
-       palloc_free_page (file_args);
-     return tid;
-   }
-
+   if (tid == TID_ERROR)
+     palloc_free_page (file_args);
+   return tid;
+ }
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -217,6 +208,7 @@ process_exit (void)
       //clear_frames_for_pd(pd);
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+      //printswapstats();
 
     }
 }
@@ -425,7 +417,7 @@ load (const char *file_args, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+//static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -504,21 +496,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
      size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-     //block_sector_t sector_idx = inode_get_inumber (file_get_inode (file), load_ofs);
-     //off_t block_id = -1;
-
-     /* If we have a read-only segment obtain its corresponding block sector
-        to be used later on in sharing read-only frames. */
-     //if (writable == false)
-    //   block_id = inode_get_block_number (file_get_inode (file), load_ofs);
-
-     //printf ("[Load segemnt] rb=%d zb=%d writable=%d page=%d\n", page_read_bytes, page_zero_bytes, writable, upage);
-     //printf ("Inode: %d Ofs %d\n", block_id, load_ofs);
-
-     Page *page = NULL;
-
-     page = file_page ( file, load_ofs, page_read_bytes,page_zero_bytes, writable, upage);
-     if (page == NULL)
+     /* Create our struct page and fillin all the file information*/
+     Page* page=NULL;
+     page=file_page(file,load_ofs,page_read_bytes,page_zero_bytes,writable,upage);
+     if(page==NULL)
        return false;
 
      /* Advance. */
@@ -537,7 +518,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
  static bool
  setup_stack (void **esp, const char *file_args)
  {
-   uint8_t *kpage;
+
    char *esp_char;
    unsigned int *esp_uint;
    int *esp_int;
@@ -545,10 +526,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
    int argc = 0;
    bool success = false;
 
-   Page* p=zero_page(((uint8_t *) PHYS_BASE) - PGSIZE,true);
+   Page* p=zero_page(((uint8_t*)PHYS_BASE)-PGSIZE,true);
    if (p != NULL)
      {
-       success = load_page(p,false);//install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+       success = load_page(p,false);
        if (success)
          {
            /* Extract the TOTAL_BYTES to push initially, and decrement
@@ -602,8 +583,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
            //unlock_frame(p->kpage);
          }
-       else
-         palloc_free_page (kpage);
+
      }
  return success;
 }
@@ -616,14 +596,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
    KPAGE should probably be a page obtained from the user pool
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
-   if memory allocation fails. */
+   if memory allocation fails.
 static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
 
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
+   Verify that there's not already a page at that virtual
+     address, then map our page there.
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}
+}*/

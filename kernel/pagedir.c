@@ -7,10 +7,12 @@
 #include "kernel/palloc.h"
 #include "vm/page.h"
 #include "vm/swap.h"
+#include "vm/frame.h"
+#include "kernel/malloc.h"
 
 static uint32_t* active_pd (void);
 static void invalidate_pagedir (uint32_t*);
-
+extern uint32_t userpool_base_addr;
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
@@ -27,29 +29,35 @@ pagedir_create (void) {
 
 /* Destroys page directory PD, freeing all the pages it
    references. */
-	void
-	pagedir_destroy (uint32_t *pd)
-	{
-	  uint32_t *pde;
+void
+pagedir_destroy (uint32_t *pd)
+{
+  uint32_t *pde;
 
-	  if (pd == NULL)
-	    return;
+  if (pd == NULL)
+    return;
 
-	  ASSERT (pd != init_page_dir);
-	  for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
-	    if (*pde & PTE_P)
-	      {
-	        uint32_t *pt = pde_get_pt (*pde);
-	        uint32_t *pte;
+  ASSERT (pd != init_page_dir);
+  for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
+    if (*pde & PTE_P)
+      {
+        uint32_t *pt = pde_get_pt (*pde);
+        uint32_t *pte;
 
-	        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
-	          if (*pte & PTE_P)
-	            palloc_free_page (pte_get_page (*pte));
-	        palloc_free_page (pt);
-	      }
-	  palloc_free_page (pd);
-	}
-
+        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++){
+          if (*pte & PTE_P)
+						free_frame(pte_get_page (*pte));
+					else if(*pte!=0){
+						Page* p=(Page*)*pte;
+						if(p->loc==SWAP)
+							swap_set_free(p->swap_index);
+						free(p);
+					}
+				}
+        palloc_free_page (pt);
+      }
+  palloc_free_page (pd);
+}
 /* Returns the address of the page table entry for virtual
    address VADDR in page directory PD.
    If PD does not have a page table for VADDR, behavior depends
@@ -116,26 +124,21 @@ pagedir_set_page (uint32_t* pd, void* upage, void* kpage, bool writable) {
 		return false;
 	}
 }
-
-bool
-pagedir_add_page (uint32_t *pd, void *upage, void *page)
-{
-  uint32_t *pte;
-
-  ASSERT (pg_ofs (upage) == 0);
-  ASSERT (is_user_vaddr (upage));
-  ASSERT (pd != init_page_dir);
-
-  pte = lookup_page (pd, upage, true);
-
-  if (pte != NULL)
-    {
-			//printf("ADDING PAGE TO PD\n");
-      ASSERT ((*pte & PTE_P) == 0);
-      *pte = (uint32_t)page;
-			//invalidate_pagedir (pd);
-      return true;
-    }
+/* Creates a custom entry into the page table that instead of pointing to
+   a kernel virtual address points to our Page struct. This was made so that
+	 we could easily load a faulting page that hasnt been brought into memory
+	 yet*/
+bool pagedir_custom_page (uint32_t* pd, void* upage, void* page){
+  uint32_t* pte;
+  ASSERT(pg_ofs(upage)==0);
+  ASSERT(is_user_vaddr(upage));
+  ASSERT(pd!=init_page_dir);
+  pte=lookup_page(pd,upage,true);
+  if(pte!=NULL){
+  	ASSERT((*pte&PTE_P)==0);
+    *pte=(uint32_t)page;
+    return true;
+  }
   else
     return false;
 }
@@ -175,44 +178,21 @@ pagedir_clear_page (uint32_t* pd, void* upage) {
 		invalidate_pagedir (pd);
 	}
 }
-
-void
-pagedir_assoc_page(void* upage,uint32_t* pd,void* kpage){
-	uint32_t* pte;
-  //
-	ASSERT (pg_ofs (upage) == 0);
-	ASSERT (is_user_vaddr (upage));
-	pte = lookup_page (pd, upage, false);
-	if (pte != NULL) {
-
-		ASSERT ((*pte & PTE_P) == 0);
-		*pte = pte_create_user (kpage, 1);
-		printf("PHYSICAL ADDRESS: %p\n",pagedir_get_page(pd,upage));
-
-	} else {
-		PANIC("PTE WAS NULL");
-	}
-
-	invalidate_pagedir (pd);
-
-}
-void *
-pagedir_find_page (uint32_t *pd, const void *uaddr)
-{
-  uint32_t *pte;
-//	printf("in pagedir_find_page\n");
-  ASSERT (is_user_vaddr (uaddr));
-
-  pte = lookup_page (pd, uaddr, false);
-	if (pte != NULL)
-    {
-      if ((*pte & PTE_P) != 0)
-        {
-          void *kpage = pte_get_page (*pte) + pg_ofs (uaddr);
-          return recover_page(kpage);
-        }
-      else
-        return *pte != 0 ? (void  *)*pte : NULL;
+/*This method takes in a pagedir and a user address supposedly in said pagedir.
+  It then tries to look up the user address to see if it is present. If it is
+	maked as present then we known it currently occupies a frame. If not then it
+	is almost certainly an entry to our Page struct.*/
+void* pagedir_find_page(uint32_t* pd, const void* uaddr){
+  uint32_t* pte;
+  ASSERT(is_user_vaddr(uaddr));
+  pte=lookup_page(pd,uaddr,false);
+	if(pte!=NULL){
+    if((*pte&PTE_P)!=0){
+      void* kpage=pte_get_page(*pte)+pg_ofs(uaddr);
+      return frametable[((uint32_t)kpage-userpool_base_addr)/PGSIZE].page;
+    }
+    else
+      return *pte != 0?(void*)*pte:NULL;
     }
   else
     return NULL;
