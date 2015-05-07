@@ -24,100 +24,106 @@ static void print_stats (void);
    shutdown_configure().  If the shutdown type is SHUTDOWN_NONE
    (which is the default), returns without doing anything. */
 void
-shutdown (void) {
-	switch (how) {
-	case SHUTDOWN_POWER_OFF:
-		shutdown_power_off ();
-		break;
+shutdown (void)
+{
+  switch (how)
+    {
+    case SHUTDOWN_POWER_OFF:
+      shutdown_power_off ();
+      break;
 
-	case SHUTDOWN_REBOOT:
-		shutdown_reboot ();
-		break;
+    case SHUTDOWN_REBOOT:
+      shutdown_reboot ();
+      break;
 
-	default:
-		/* Nothing to do. */
-		break;
-	}
+    default:
+      /* Nothing to do. */
+      break;
+    }
 }
 
 /* Sets TYPE as the way that machine will shut down when Pintos
    execution is complete. */
 void
-shutdown_configure (enum shutdown_type type) {
-	how = type;
+shutdown_configure (enum shutdown_type type)
+{
+  how = type;
 }
 
 /* Reboots the machine via the keyboard controller. */
 void
-shutdown_reboot (void) {
-	printf ("Rebooting...\n");
+shutdown_reboot (void)
+{
+  printf ("Rebooting...\n");
 
-	/* See [kbd] for details on how to program the keyboard
-	 * controller. */
-	for (;;) {
-		int i;
+    /* See [kbd] for details on how to program the keyboard
+     * controller. */
+  for (;;)
+    {
+      int i;
 
-		/* Poll keyboard controller's status byte until
-		 * 'input buffer empty' is reported. */
-		for (i = 0; i < 0x10000; i++) {
-			if ((inb (CONTROL_REG) & 0x02) == 0) {
-				break;
-			}
-			timer_udelay (2);
-		}
+      /* Poll keyboard controller's status byte until
+       * 'input buffer empty' is reported. */
+      for (i = 0; i < 0x10000; i++)
+        {
+          if ((inb (CONTROL_REG) & 0x02) == 0)
+            break;
+          timer_udelay (2);
+        }
 
-		timer_udelay (50);
+      timer_udelay (50);
 
-		/* Pulse bit 0 of the output port P2 of the keyboard controller.
-		 * This will reset the CPU. */
-		outb (CONTROL_REG, 0xfe);
-		timer_udelay (50);
-	}
+      /* Pulse bit 0 of the output port P2 of the keyboard controller.
+       * This will reset the CPU. */
+      outb (CONTROL_REG, 0xfe);
+      timer_udelay (50);
+    }
 }
 
 /* Powers down the machine we're running on,
    as long as we're running on Bochs or QEMU. */
 void
-shutdown_power_off (void) {
-	const char s[] = "Shutdown";
-	const char* p;
+shutdown_power_off (void)
+{
+  const char s[] = "Shutdown";
+  const char *p;
 
 #ifdef FILESYS
-	filesys_done ();
+  filesys_done ();
 #endif
 
-	print_stats ();
+  print_stats ();
 
-	printf ("Powering off...\n");
-	serial_flush ();
+  printf ("Powering off...\n");
+  serial_flush ();
 
-	/* This is a special power-off sequence supported by Bochs and
-	   QEMU, but not by physical hardware. */
-	for (p = s; *p != '\0'; p++) {
-		outb (0x8900, *p);
-	}
+  /* This is a special power-off sequence supported by Bochs and
+     QEMU, but not by physical hardware. */
+  for (p = s; *p != '\0'; p++)
+    outb (0x8900, *p);
 
-	/* This will power off a VMware VM if "gui.exitOnCLIHLT = TRUE"
-	   is set in its configuration file.  (The "pintos" script does
-	   that automatically.)  */
-	asm volatile ("cli; hlt" : : : "memory");
+  /* This will power off a VMware VM if "gui.exitOnCLIHLT = TRUE"
+     is set in its configuration file.  (The "pintos" script does
+     that automatically.)  */
+  asm volatile ("cli; hlt" : : : "memory");
 
-	/* None of those worked. */
-	printf ("still running...\n");
-	for (;;);
+  /* None of those worked. */
+  printf ("still running...\n");
+  for (;;);
 }
 
 /* Print statistics about Pintos execution. */
 static void
-print_stats (void) {
-	timer_print_stats ();
-	thread_print_stats ();
+print_stats (void)
+{
+  timer_print_stats ();
+  thread_print_stats ();
 #ifdef FILESYS
-	block_print_stats ();
+  block_print_stats ();
 #endif
-	console_print_stats ();
-	kbd_print_stats ();
+  console_print_stats ();
+  kbd_print_stats ();
 #ifdef USERPROG
-	exception_print_stats ();
+  exception_print_stats ();
 #endif
 }

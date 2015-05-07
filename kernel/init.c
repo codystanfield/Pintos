@@ -27,14 +27,12 @@
 #include "kernel/gdt.h"
 #include "kernel/syscall.h"
 #include "kernel/tss.h"
-#include "vm/frame.h"
-#include "vm/page.h"
-#include "vm/swap.h"
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
+#include "filesys/inode.h"
 #endif
 
 /* Page directory with kernel mappings only. */
@@ -97,8 +95,6 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-  preptable();
-  preppagetable();
 
   /* Segmentation. */
 #ifdef USERPROG
@@ -112,7 +108,6 @@ main (void)
   kbd_init ();
   input_init ();
 #ifdef USERPROG
-
   exception_init ();
   syscall_init ();
 #endif
@@ -127,13 +122,88 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
-  prepswaptable();
 #endif
 
   printf ("Boot complete.\n");
 
   /* Run actions specified on kernel command line. */
   run_actions (argv);
+
+  // /* My stuff oh yeah :) */
+  // printf("----------------------------------------------------------------------\n");
+  // printf("Hellllloooooo!!\n");
+  // const char* file = "mine.txt";
+  // if(filesys_create(file, 0)) {
+  //   printf("It's alliiiiiivve!!!\n");
+  //   printf("Opening the file\n");
+  //   struct file* my_file = filesys_open(file);
+  //   if(my_file != NULL) {
+  //     printf("HOLY SHIT IT OPENED!!!\n");
+  //   }
+  //   // printf("About to delete the file\n");
+  //   // if(filesys_remove(file)) {
+  //   //   printf("Remove successful!\n");
+  //   // }
+  //   printf("Moment of truth... time to write!\n");
+  //   const char* hello_world = "Hello world!\n";
+  //   int i;
+  //   // for(i = 0; i < 100; i++) {
+  //     file_write(my_file, hello_world, sizeof "Hello world!\n");
+  //     // file_write(my_file, hello_world, sizeof "Hello world!\n");
+  //   // }
+  //   // PANIC("Quit here\n");
+  //   printf("Writing past the EOF\n");
+  //   file_write_at(my_file, hello_world, sizeof "Hello world!\n", 20000);
+  //   // printf("Writing in the doubly indirect block\n");
+  //   // file_write_at(my_file, hello_world, sizeof "sello world!\n", 7340032);
+  //   printf("Reading from first sector\n");
+  //   char* read_input;
+  //   // file_read_at(my_file, read_input, sizeof "Hello world!\n", 0);
+  //   // printf("read_input: %s\n", read_input);
+  //
+  //   printf("Reading two hello_worlds\n");
+  //   // struct inode* my_inode = file_get_inode(my_file);
+  //   // block_sector_t inode_number = inode_get_inumber(my_inode);
+  //   printf("----------------------------------------------------------------------\n");
+  //   // printf("Before first read, file's inode number is: %d and length is %d\n", /*file_get_inode(my_file), file_length(my_file)*/ inode_number, file_length(my_file));
+  //   printf("Before first read, file's inode number is: __ and length is __\n");
+  //   struct inode* temp_inode = file_get_inode(my_file);
+  //   printf("Memory of my_file's inode: %p\n", temp_inode);
+  //   printf("----------------------------------------------------------------------\n");
+  //   // file_read_at(my_file, read_input, sizeof "Hello world!\n", 0);
+  //   file_read(my_file, read_input, sizeof "Hello world!\n");
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //   printf("read_input: %s\n\n\n", read_input);
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //   printf("----------------------------------------------------------------------\n");
+  //   // printf("After first read, file's inode number is: %d and length is %d\n", inode_number, file_length(my_file));
+  //   printf("After first read, file's inode number is: __ and length is __\n");
+  //   printf("Memory of my_file's inode: %p\n", file_get_inode(my_file));
+  //   printf("----------------------------------------------------------------------\n");
+  //   file_read_at(my_file, read_input, sizeof "Hello world!\n", 0);
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //   printf("read_input: %s\n", read_input);
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //
+  //   printf("Reading from the spot we extended to\n");
+  //   file_read_at(my_file, read_input, sizeof "Hello world!\n", 20000);
+  //   printf("read_input: %s\n", read_input);
+  //
+  //
+  // }
+  // else {
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //   printf("Opening test.txt\n");
+  //   printf("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n");
+  //   const char* test = "test.txt";
+  //   char* test_input;
+  //   struct file* test_file = filesys_open(test);
+  //   PANIC("Before file_read\n");
+  //   file_read(test_file, test_input, sizeof "Hello world!\n");
+  //   printf("test_input: %s\n", test_input);
+  //   PANIC("Quit here\n");
+  // }
+  // printf("----------------------------------------------------------------------\n");
 
   /* Finish up. */
   shutdown ();

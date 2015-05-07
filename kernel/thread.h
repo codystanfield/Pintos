@@ -9,12 +9,13 @@
 #include "filesys/file.h"
 
 /* States in a thread's life cycle. */
-enum thread_status {
-	THREAD_RUNNING,     /* Running thread. */
-	THREAD_READY,       /* Not running but ready to run. */
-	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-	THREAD_DYING        /* About to be destroyed. */
-};
+enum thread_status
+  {
+    THREAD_RUNNING,     /* Running thread. */
+    THREAD_READY,       /* Not running but ready to run. */
+    THREAD_BLOCKED,     /* Waiting for an event to trigger. */
+    THREAD_DYING        /* About to be destroyed. */
+  };
 
 /* Lock used by threads when accessing file system code.
    This variable is declared and initialized in thread.c. */
@@ -25,11 +26,12 @@ extern struct lock thread_filesys_lock;
         this struct is currently being used as a valid file mapping
       - contains a pointer to an open file (file)
       - contains a file descriptor (fd) for the open file */
-struct file_mapping {
-	uint8_t used;
-	struct file* file;
-	int fd;
-};
+struct file_mapping
+  {
+    uint8_t used;
+    struct file *file;
+    int fd;
+  };
 
 #define MAX_FILES 128   /* Maximum amount of open files for each thread. */
 
@@ -42,7 +44,6 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
 
 /* A kernel thread or user process.
 
@@ -93,7 +94,7 @@ typedef int tid_t;
    an assertion failure in thread_current(), which checks that
    the `magic' member of the running thread's `struct thread' is
    set to THREAD_MAGIC.  Stack overflow will normally change this
-   value, triggering the assertion.  (So don't add elements below
+   value, triggering the assertion.  (So don't add elements below 
    THREAD_MAGIC.)
 */
 /* The `elem' member has a dual purpose.  It can be an element in
@@ -102,42 +103,42 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-struct thread {
-	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	uint8_t* stack;                     /* Saved stack pointer. */
-	int priority;                       /* Priority. */
-	struct list_elem allelem;           /* List element for all threads list. */
+struct thread
+  {
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    struct list_elem allelem;           /* List element for all threads list. */
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
 
-	struct thread* parent;              /* Pointer to this thread's parent. */
-	struct list live_children;          /* List of this thread's live children. */
-	struct list zombie_children;        /* List of this thread's zombie children. */
-	struct list_elem child_elem;        /* List element for parent's children lists. */
-	struct semaphore exit_sema;         /* Semaphore for parent/child exit synchronization. */
-	int exit_status;                    /* This thread's exit status. */
+    struct thread *parent;              /* Pointer to this thread's parent. */
+    struct list live_children;          /* List of this thread's live children. */
+    struct list zombie_children;        /* List of this thread's zombie children. */
+    struct list_elem child_elem;        /* List element for parent's children lists. */
+    struct semaphore exit_sema;         /* Semaphore for parent/child exit synchronization. */
+    int exit_status;                    /* This thread's exit status. */
 
-	struct file_mapping open_files[MAX_FILES];  /* An array of open files along
+    struct file_mapping open_files[MAX_FILES];  /* An array of open files along
                                                    with their file descriptors. */
 
-	struct file* exec_file;             /* The file that this thread is executing. */
-	struct semaphore exec_sema;         /* Semaphore for parent/child exec synchronization. */
-	bool exec_child_success;            /* Boolean for whether the currently executing child
+    struct file *exec_file;             /* The file that this thread is executing. */
+    struct semaphore exec_sema;         /* Semaphore for parent/child exec synchronization. */
+    bool exec_child_success;            /* Boolean for whether the currently executing child
                                            of this thread executed successfully. */
-	int ret_status;
 
 #ifdef USERPROG
-	/* Owned by kernel/process.c. */
-	uint32_t* pagedir;                  /* Page directory. */
+    /* Owned by kernel/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
 #endif
 
-	/* Owned by thread.c. */
-	unsigned magic;                     /* Detects stack overflow. */
-};
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+  };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -150,24 +151,22 @@ void thread_start (void);
 void thread_tick (void);
 void thread_print_stats (void);
 
-typedef void thread_func (void* aux);
-tid_t thread_create (const char* name, int priority, thread_func*, void*);
+typedef void thread_func (void *aux);
+tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
-void thread_unblock (struct thread*);
+void thread_unblock (struct thread *);
 
-struct thread* thread_current (void);
+struct thread *thread_current (void);
 tid_t thread_tid (void);
-struct thread *thread_by_tid (tid_t);
-
-const char* thread_name (void);
+const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
-typedef void thread_action_func (struct thread* t, void* aux);
-void thread_foreach (thread_action_func*, void*);
+typedef void thread_action_func (struct thread *t, void *aux);
+void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);

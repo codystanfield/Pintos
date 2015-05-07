@@ -17,7 +17,7 @@ char buf[TEST_SIZE];
 int order[BLOCK_CNT];
 
 void
-test_main (void) 
+test_main (void)
 {
   const char *file_name = "bazzle";
   int fd;
@@ -34,7 +34,7 @@ test_main (void)
 
   msg ("write \"%s\" in random order", file_name);
   shuffle (order, BLOCK_CNT, sizeof *order);
-  for (i = 0; i < BLOCK_CNT; i++) 
+  for (i = 0; i < BLOCK_CNT; i++)
     {
       size_t ofs = BLOCK_SIZE * order[i];
       seek (fd, ofs);
@@ -44,13 +44,16 @@ test_main (void)
 
   msg ("read \"%s\" in random order", file_name);
   shuffle (order, BLOCK_CNT, sizeof *order);
-  for (i = 0; i < BLOCK_CNT; i++) 
+  for (i = 0; i < BLOCK_CNT; i++)
     {
       char block[BLOCK_SIZE];
       size_t ofs = BLOCK_SIZE * order[i];
       seek (fd, ofs);
-      if (read (fd, block, BLOCK_SIZE) != BLOCK_SIZE)
+      int temp;
+      if (temp = read (fd, block, BLOCK_SIZE) != BLOCK_SIZE) {
+        msg ("Read %d bytes instead of 512\n", temp);
         fail ("read %d bytes at offset %zu failed", (int) BLOCK_SIZE, ofs);
+      }
       compare_bytes (block, buf + ofs, BLOCK_SIZE, ofs, file_name);
     }
 
