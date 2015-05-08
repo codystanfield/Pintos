@@ -20,9 +20,7 @@
 struct bitmap;
 
 typedef struct {
-  // uint32_t* direct_blocks[128];
-  // block_sector_t* direct_blocks[128];
-  block_sector_t direct_blocks[128];  //I think it would work to not use pointer: the values themselves are essentially the addresses of the sectors (I think)
+  block_sector_t direct_blocks[128];
 } singly_indirect_block_;
 
 typedef struct {
@@ -34,7 +32,6 @@ typedef struct {
 } doubly_indirect_allocations_;
 
 struct inode_disk {
-	// block_sector_t start;               /* First data sector. */
 	off_t length;                       /* File size in bytes. */
 	unsigned magic;                     /* Magic number. */
 	bool is_directory;
@@ -43,11 +40,11 @@ struct inode_disk {
 	block_sector_t singly_indirect_block_sector;
 	block_sector_t doubly_indirect_block_sector;
 	block_sector_t doubly_indirect_allocations_sector;
-  
-	block_sector_t direct_blocks[NUM_DIRECT_BLOCKS];	/* Array that holds sector numbers of direct blocks; addresses 63kB, or 63488 bytes */
-	singly_indirect_block_* singly_indirect_block;	/* Pointer to block that contains array of pointers to direct blocks  (128 pointers total); addresses 64kB, or 65,536 bytes */
-	doubly_indirect_block_* doubly_indirect_block;	/* Pointer to block that contains array of pointers to singly indirect blocks (128 pointers to singly indirect blocks, totals 16384 data blocks); addresses 8MB, or 8,388,608 bytes */
-	doubly_indirect_allocations_* doubly_indirect_allocations;
+
+	block_sector_t direct_blocks[NUM_DIRECT_BLOCKS];	/* Array that holds sector numbers of direct blocks */
+	singly_indirect_block_* singly_indirect_block;	/* Pointer to block that contains array of pointers to direct blocks  (128 pointers total) */
+	doubly_indirect_block_* doubly_indirect_block;	/* Pointer to block that contains array of pointers to singly indirect blocks (128 pointers to singly indirect blocks, totals 16384 data blocks) */
+	doubly_indirect_allocations_* doubly_indirect_allocations; /* Pointer to block that holds sector numbers of singly indirect blocks in the doubly indirect block; mapped 1:1 */
 };
 
 /* In-memory inode. */
@@ -72,6 +69,5 @@ off_t inode_write_at (struct inode*, const void*, off_t size, off_t offset);
 void inode_deny_write (struct inode*);
 void inode_allow_write (struct inode*);
 off_t inode_length (const struct inode*);
-// bool allocate_and_write(struct inode_disk*, )
 
 #endif /* filesys/inode.h */
